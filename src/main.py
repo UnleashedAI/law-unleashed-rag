@@ -19,7 +19,8 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-from src.services.rag_service import RAGProcessingService
+from src.services.rag_factory import RAGFactory
+from src.services.rag_interface import RAGInterface
 from src.services.auth_service import AuthService
 from src.models.api_models import (
     ProcessDocumentRequest,
@@ -27,7 +28,11 @@ from src.models.api_models import (
     ProcessingJobResponse,
     ProcessingStatusResponse,
     HealthResponse,
-    ErrorResponse
+    ErrorResponse,
+    RAGApproachesResponse,
+    RAGApproachInfo,
+    QueryRequest,
+    QueryResponse
 )
 from src.utils.firebase_utils import FirebaseManager
 from src.utils.gcs_utils import GCSManager
@@ -43,52 +48,59 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Prometheus metrics
-REQUEST_COUNT = Counter('rag_anything_http_requests_total', 'Total HTTP requests', ['method', 'endpoint', 'status'])
-REQUEST_DURATION = Histogram('rag_anything_http_request_duration_seconds', 'HTTP request duration', ['method', 'endpoint'])
-DOCUMENT_PROCESSING_DURATION = Histogram('rag_anything_document_processing_duration_seconds', 'Document processing duration')
+# Prometheus metrics - register only once
+try:
+    REQUEST_COUNT = Counter('rag_anything_http_requests_total', 'Total HTTP requests', ['method', 'endpoint', 'status'])
+    REQUEST_DURATION = Histogram('rag_anything_http_request_duration_seconds', 'HTTP request duration', ['method', 'endpoint'])
+    DOCUMENT_PROCESSING_DURATION = Histogram('rag_anything_document_processing_duration_seconds', 'Document processing duration')
+except ValueError:
+    # Metrics already registered (reload scenario)
+    from prometheus_client import REGISTRY
+    REQUEST_COUNT = REGISTRY._names_to_collectors['rag_anything_http_requests_total']
+    REQUEST_DURATION = REGISTRY._names_to_collectors['rag_anything_http_request_duration_seconds']
+    DOCUMENT_PROCESSING_DURATION = REGISTRY._names_to_collectors['rag_anything_document_processing_duration_seconds']
 
 # Global service instances
 firebase_manager: FirebaseManager | None = None
 gcs_manager: GCSManager | None = None
 auth_service: AuthService | None = None
-rag_service: RAGProcessingService | None = None
+rag_factory: RAGFactory | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
-    global firebase_manager, gcs_manager, auth_service, rag_service
+    global firebase_manager, gcs_manager, auth_service, rag_factory
     
-    logger.info("Starting RAG-Anything service")
+    logger.info("Starting RAG Test Bed service")
     
     try:
         # Initialize services
         firebase_manager = FirebaseManager()
         gcs_manager = GCSManager()
         auth_service = AuthService(firebase_manager)
-        rag_service = RAGProcessingService(firebase_manager, gcs_manager, auth_service)
+        rag_factory = RAGFactory()
         
         # Test connections
         await firebase_manager.test_connection()
         await gcs_manager.test_connection()
         
-        logger.info("RAG-Anything service started successfully")
+        logger.info("RAG Test Bed service started successfully")
         
         yield
         
     except Exception as e:
-        logger.error(f"Failed to start RAG-Anything service: {e}")
+        logger.error(f"Failed to start RAG Test Bed service: {e}")
         raise
     finally:
-        logger.info("Shutting down RAG-Anything service")
+        logger.info("Shutting down RAG Test Bed service")
 
 
 # Create FastAPI app
 app = FastAPI(
-    title="RAG-Anything Service",
-    description="Document processing service using RAG-Anything framework for law-unleashed",
-    version="1.0.0",
+    title="RAG Test Bed Service",
+    description="Document processing service with multiple RAG approaches for law-unleashed",
+    version="2.0.0",
     lifespan=lifespan
 )
 
@@ -113,19 +125,25 @@ def get_auth_service() -> AuthService:
 
 
 # Dependency to get RAG service
-def get_rag_service() -> RAGProcessingService:
-    if rag_service is None:
+def get_rag_service(approach: str = "raganything") -> RAGInterface:
+    if rag_factory is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="RAG processing service not available"
+            detail="RAG factory not available"
         )
-    return rag_service
+    try:
+        return rag_factory.create_rag_service(approach, firebase_manager, gcs_manager, auth_service)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Basic health check endpoint"""
-    return HealthResponse(status="healthy", service="rag-anything")
+    return HealthResponse(status="healthy", service="rag-test-bed")
 
 
 @app.get("/health/detailed", response_model=HealthResponse)
@@ -133,7 +151,7 @@ async def detailed_health_check():
     """Detailed health check with service status"""
     health_status = {
         "status": "healthy",
-        "service": "rag-anything",
+        "service": "rag-test-bed",
         "services": {}
     }
     
@@ -162,17 +180,51 @@ async def metrics():
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
+@app.get("/rag-approaches", response_model=RAGApproachesResponse)
+async def get_rag_approaches():
+    """Get available RAG approaches and their capabilities"""
+    if rag_factory is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="RAG factory not available"
+        )
+    
+    approaches = {}
+    for approach_name in rag_factory.get_available_approaches():
+        try:
+            approach_info = rag_factory.get_approach_info(approach_name)
+            approaches[approach_name] = RAGApproachInfo(
+                name=approach_info["name"],
+                supported_parsers=approach_info["supported_parsers"],
+                supported_models=approach_info["supported_models"],
+                description=f"RAG approach using {approach_info['name']}"
+            )
+        except Exception as e:
+            logger.warning(f"Could not get info for approach {approach_name}: {e}")
+            approaches[approach_name] = RAGApproachInfo(
+                name=approach_name,
+                supported_parsers=[],
+                supported_models=[],
+                description=f"RAG approach: {approach_name}"
+            )
+    
+    return RAGApproachesResponse(
+        approaches=approaches,
+        default_approach="raganything"
+    )
+
+
 @app.post("/process-document", response_model=ProcessingJobResponse)
 async def process_document(
     request: ProcessDocumentRequest,
     background_tasks: BackgroundTasks,
-    auth: AuthService = Depends(get_auth_service),
-    rag: RAGProcessingService = Depends(get_rag_service)
+    auth: AuthService = Depends(get_auth_service)
 ):
-    """Process a single document with RAG-Anything"""
+    """Process a single document with selected RAG approach"""
     logger.info(f"🎯 API endpoint /process-document called")
     logger.info(f"📋 Request data: user_id={request.user_id}, project_id={request.project_id}, workspace_id={request.workspace_id}")
     logger.info(f"📄 GCS path: {request.gcs_path}")
+    logger.info(f"🔧 RAG approach: {request.rag_approach}")
     
     REQUEST_COUNT.labels(method="POST", endpoint="/process-document", status="started").inc()
     
@@ -191,6 +243,9 @@ async def process_document(
                     detail="User does not have access to this workspace"
                 )
             
+            # Get RAG service for the specified approach
+            rag = get_rag_service(request.rag_approach)
+            
             # Generate job ID
             job_id = str(uuid.uuid4())
             
@@ -203,6 +258,7 @@ async def process_document(
                 job_type="document",
                 gcs_path=request.gcs_path,
                 config={
+                    'rag_approach': request.rag_approach,
                     'parser': request.parser,
                     'parse_method': request.parse_method,
                     'model': request.model,
@@ -228,7 +284,7 @@ async def process_document(
             return ProcessingJobResponse(
                 job_id=job_id,
                 status="pending",
-                message="Document processing job created successfully",
+                message=f"Document processing job created successfully with {request.rag_approach}",
                 created_at=datetime.utcnow()
             )
             
@@ -247,13 +303,13 @@ async def process_document(
 async def process_folder(
     request: ProcessFolderRequest,
     background_tasks: BackgroundTasks,
-    auth: AuthService = Depends(get_auth_service),
-    rag: RAGProcessingService = Depends(get_rag_service)
+    auth: AuthService = Depends(get_auth_service)
 ):
-    """Process all documents in a folder with RAG-Anything"""
+    """Process all documents in a folder with selected RAG approach"""
     logger.info(f"🎯 API endpoint /process-folder called")
     logger.info(f"📋 Request data: user_id={request.user_id}, project_id={request.project_id}, workspace_id={request.workspace_id}")
     logger.info(f"📁 GCS folder path: {request.gcs_folder_path}")
+    logger.info(f"🔧 RAG approach: {request.rag_approach}")
     
     REQUEST_COUNT.labels(method="POST", endpoint="/process-folder", status="started").inc()
     
@@ -272,6 +328,9 @@ async def process_folder(
                     detail="User does not have access to this workspace"
                 )
             
+            # Get RAG service for the specified approach
+            rag = get_rag_service(request.rag_approach)
+            
             # Generate job ID
             job_id = str(uuid.uuid4())
             
@@ -284,6 +343,7 @@ async def process_folder(
                 job_type="folder",
                 gcs_path=request.gcs_folder_path,
                 config={
+                    'rag_approach': request.rag_approach,
                     'parser': request.parser,
                     'parse_method': request.parse_method,
                     'model': request.model,
@@ -311,7 +371,7 @@ async def process_folder(
             return ProcessingJobResponse(
                 job_id=job_id,
                 status="pending",
-                message="Folder processing job created successfully",
+                message=f"Folder processing job created successfully with {request.rag_approach}",
                 created_at=datetime.utcnow()
             )
             
@@ -330,16 +390,15 @@ async def process_folder(
 async def get_processing_status(
     job_id: str,
     user_id: str,
-    auth: AuthService = Depends(get_auth_service),
-    rag: RAGProcessingService = Depends(get_rag_service)
+    auth: AuthService = Depends(get_auth_service)
 ):
     """Get processing status for a job"""
     REQUEST_COUNT.labels(method="GET", endpoint="/processing-status", status="started").inc()
     
     with REQUEST_DURATION.labels(method="GET", endpoint="/processing-status").time():
         try:
-            # Get job information
-            job_info = await rag.get_processing_status(job_id)
+            # Get job information from Firebase
+            job_info = await firebase_manager.get_rag_processing_job(job_id)
             
             if not job_info:
                 REQUEST_COUNT.labels(method="GET", endpoint="/processing-status", status="404").inc()
@@ -461,6 +520,69 @@ async def get_project_jobs(
             )
 
 
+@app.post("/query", response_model=QueryResponse)
+async def query_documents(
+    request: QueryRequest,
+    auth: AuthService = Depends(get_auth_service)
+):
+    """Query processed documents using a specific RAG approach"""
+    import time
+    
+    logger.info(f"🎯 API endpoint /query called")
+    logger.info(f"📋 Request data: user_id={request.user_id}, project_id={request.project_id}")
+    logger.info(f"🔧 RAG approach: {request.rag_approach}")
+    logger.info(f"❓ Query: {request.query[:100]}...")
+    
+    REQUEST_COUNT.labels(method="POST", endpoint="/query", status="started").inc()
+    start_time = time.time()
+    
+    with REQUEST_DURATION.labels(method="POST", endpoint="/query").time():
+        try:
+            # Verify user access to project
+            has_access = await auth.verify_project_access(request.user_id, request.project_id)
+            if not has_access:
+                REQUEST_COUNT.labels(method="POST", endpoint="/query", status="403").inc()
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="User does not have access to this project"
+                )
+            
+            # Get RAG service for the specified approach
+            rag = get_rag_service(request.rag_approach)
+            
+            # Query the documents
+            result = await rag.query_documents(
+                user_id=request.user_id,
+                project_id=request.project_id,
+                query=request.query,
+                model=request.model,
+                config=request.config
+            )
+            
+            processing_time = time.time() - start_time
+            
+            REQUEST_COUNT.labels(method="POST", endpoint="/query", status="200").inc()
+            return QueryResponse(
+                query=request.query,
+                answer=result.get("answer", ""),
+                rag_approach=request.rag_approach,
+                model=request.model,
+                sources=result.get("sources", []),
+                metadata=result.get("metadata", {}),
+                processing_time=processing_time
+            )
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error processing query: {e}")
+            REQUEST_COUNT.labels(method="POST", endpoint="/query", status="500").inc()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error processing query: {str(e)}"
+            )
+
+
 if __name__ == "__main__":
     import uvicorn
     
@@ -470,7 +592,7 @@ if __name__ == "__main__":
     log_level = os.getenv("LOG_LEVEL", "info").lower()
     
     uvicorn.run(
-        "main:app",
+        "src.main:app",
         host=host,
         port=port,
         log_level=log_level,

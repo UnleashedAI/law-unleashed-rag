@@ -1,5 +1,5 @@
 """
-RAG-Anything service for document and folder processing
+LlamaIndex RAG service implementation
 """
 
 import logging
@@ -11,147 +11,85 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 from datetime import datetime
 
-from raganything import RAGAnything, RAGAnythingConfig
-from lightrag.llm.openai import openai_complete_if_cache, openai_embed
-from lightrag.utils import EmbeddingFunc, logger, set_verbose_debug
+from llama_index.core import (
+    VectorStoreIndex, 
+    SimpleDirectoryReader, 
+    StorageContext,
+    load_index_from_storage
+)
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.llms.openai import OpenAI
+from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_parse import LlamaParse
+from llama_index.vector_stores.google import GoogleVectorStore
+from llama_index.core import Settings
 
-from src.utils.firebase_utils import FirebaseManager
-from src.utils.gcs_utils import GCSManager
-from src.services.auth_service import AuthService
-from src.models.firebase_models import RAGProcessingMetadata
+from src.services.rag_interface import RAGInterface
 
 logger = logging.getLogger(__name__)
 
 
-class RAGProcessingService:
-    """Service for processing documents with RAG-Anything"""
+class LlamaIndexService(RAGInterface):
+    """Service for processing documents with LlamaIndex"""
     
-    def __init__(self, firebase_manager: FirebaseManager, gcs_manager: GCSManager, auth_service: AuthService):
-        self.firebase_manager = firebase_manager
-        self.gcs_manager = gcs_manager
-        self.auth_service = auth_service
+    def __init__(self, firebase_manager, gcs_manager, auth_service):
+        super().__init__(firebase_manager, gcs_manager, auth_service)
         
-        # Storage configuration - use local directories for development
-        self.storage_dir = os.getenv("RAG_STORAGE_DIR", "./storage")
+        # Storage configuration
+        self.storage_dir = os.getenv("LLAMAINDEX_STORAGE_DIR", "./storage/llamaindex")
         self.temp_dir = os.getenv("RAG_TEMP_DIR", "./temp")
         
         # Ensure directories exist
         os.makedirs(self.storage_dir, exist_ok=True)
         os.makedirs(self.temp_dir, exist_ok=True)
         
-        # Initialize RAG-Anything with storage backends
-        self._initialize_rag_storage()
+        # Initialize LlamaIndex components
+        self._initialize_llamaindex()
     
-    def _initialize_rag_storage(self):
-        """Initialize RAG-Anything following the official example"""
+    def _initialize_llamaindex(self):
+        """Initialize LlamaIndex components"""
         try:
-            # Log environment variables for debugging
-            logger.info("Environment variables:")
-            logger.info(f"  OPENAI_API_KEY: {'***' + os.getenv('OPENAI_API_KEY', 'NOT_SET')[-4:] if os.getenv('OPENAI_API_KEY') else 'NOT_SET'}")
-            logger.info(f"  OPENAI_BASE_URL: {os.getenv('OPENAI_BASE_URL', 'NOT_SET')}")
-            logger.info(f"  MODEL: {os.getenv('MODEL', 'NOT_SET')}")
-            logger.info(f"  PARSER: {os.getenv('PARSER', 'NOT_SET')}")
-            logger.info(f"  PARSE_METHOD: {os.getenv('PARSE_METHOD', 'NOT_SET')}")
-            logger.info(f"  RAG_STORAGE_DIR: {os.getenv('RAG_STORAGE_DIR', 'NOT_SET')}")
-            logger.info(f"  RAG_TEMP_DIR: {os.getenv('RAG_TEMP_DIR', 'NOT_SET')}")
-            
-            # Create RAGAnything configuration
-            config = RAGAnythingConfig(
-                working_dir=self.storage_dir,
-                parser=os.getenv("PARSER", "mineru"),
-                parse_method=os.getenv("PARSE_METHOD", "auto"),
-                enable_image_processing=True,
-                enable_table_processing=True,
-                enable_equation_processing=True,
+            # Configure LLM
+            self.llm = OpenAI(
+                model=os.getenv("MODEL", "gpt-4o-mini"),
+                api_key=os.getenv("OPENAI_API_KEY"),
+                base_url=os.getenv("OPENAI_BASE_URL")
             )
             
-            # Define LLM model function
-            def llm_model_func(prompt, system_prompt=None, history_messages=[], **kwargs):
-                return openai_complete_if_cache(
-                    os.getenv("MODEL", "gpt-4o-mini"),
-                    prompt,
-                    system_prompt=system_prompt,
-                    history_messages=history_messages,
-                    api_key=os.getenv("OPENAI_API_KEY"),
-                    base_url=os.getenv("OPENAI_BASE_URL"),
-                    **kwargs,
+            # Configure embeddings
+            self.embed_model = OpenAIEmbedding(
+                model="text-embedding-3-large",
+                api_key=os.getenv("OPENAI_API_KEY"),
+                base_url=os.getenv("OPENAI_BASE_URL")
+            )
+            
+            # Configure global settings
+            Settings.llm = self.llm
+            Settings.embed_model = self.embed_model
+            Settings.node_parser = SentenceSplitter(chunk_size=1024, chunk_overlap=200)
+            
+            # Initialize LlamaParse if API key is available
+            self.llama_parse = None
+            if os.getenv("LLAMA_CLOUD_API_KEY"):
+                self.llama_parse = LlamaParse(
+                    api_key=os.getenv("LLAMA_CLOUD_API_KEY"),
+                    result_type="markdown",
+                    verbose=True
                 )
             
-            # Define vision model function
-            def vision_model_func(
-                prompt, system_prompt=None, history_messages=[], image_data=None, messages=None, **kwargs
-            ):
-                if messages:
-                    return openai_complete_if_cache(
-                        "gpt-4o",
-                        "",
-                        system_prompt=None,
-                        history_messages=[],
-                        messages=messages,
-                        api_key=os.getenv("OPENAI_API_KEY"),
-                        base_url=os.getenv("OPENAI_BASE_URL"),
-                        **kwargs,
-                    )
-                elif image_data:
-                    return openai_complete_if_cache(
-                        "gpt-4o",
-                        "",
-                        system_prompt=None,
-                        history_messages=[],
-                        messages=[
-                            {"role": "system", "content": system_prompt} if system_prompt else None,
-                            {
-                                "role": "user",
-                                "content": [
-                                    {"type": "text", "text": prompt},
-                                    {
-                                        "type": "image_url",
-                                        "image_url": {"url": f"data:image/jpeg;base64,{image_data}"},
-                                    },
-                                ],
-                            }
-                            if image_data
-                            else {"role": "user", "content": prompt},
-                        ],
-                        api_key=os.getenv("OPENAI_API_KEY"),
-                        base_url=os.getenv("OPENAI_BASE_URL"),
-                        **kwargs,
-                    )
-                else:
-                    return llm_model_func(prompt, system_prompt, history_messages, **kwargs)
+            # Initialize Google Vector Store if configured
+            self.vector_store = None
+            if os.getenv("GOOGLE_PROJECT_ID") and os.getenv("GOOGLE_VECTOR_STORE_ID"):
+                self.vector_store = GoogleVectorStore(
+                    project_id=os.getenv("GOOGLE_PROJECT_ID"),
+                    vector_store_id=os.getenv("GOOGLE_VECTOR_STORE_ID")
+                )
             
-            # Define embedding function
-            embedding_func = EmbeddingFunc(
-                embedding_dim=3072,
-                max_token_size=8192,
-                func=lambda texts: openai_embed(
-                    texts,
-                    model="text-embedding-3-large",
-                    api_key=os.getenv("OPENAI_API_KEY"),
-                    base_url=os.getenv("OPENAI_BASE_URL"),
-                ),
-            )
-            
-            # Initialize RAGAnything with LightRAG integration
-            self.rag_anything = RAGAnything(
-                config=config,
-                llm_model_func=llm_model_func,
-                vision_model_func=vision_model_func,
-                embedding_func=embedding_func,
-            )
-            
-            # Store storage paths for result reporting
-            self.kv_storage_path = os.path.join(self.storage_dir, "kv")
-            self.vector_storage_path = os.path.join(self.storage_dir, "vector")
-            self.graph_storage_path = os.path.join(self.storage_dir, "graph")
-            self.doc_status_storage_path = os.path.join(self.storage_dir, "status")
-            
-            logger.info("RAG-Anything initialized with LightRAG")
+            logger.info("LlamaIndex initialized successfully")
             
         except Exception as e:
-            logger.error(f"Failed to initialize RAG-Anything: {e}")
+            logger.error(f"Failed to initialize LlamaIndex: {e}")
             raise
-    
     
     async def process_document(
         self,
@@ -160,28 +98,12 @@ class RAGProcessingService:
         project_id: str,
         workspace_id: str,
         gcs_path: str,
-        parser: str = "mineru",
+        parser: str = "llamaparse",
         parse_method: str = "auto",
-        model: str = "gpt-4",
+        model: str = "gpt-4o-mini",
         config: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """
-        Process a single document with RAG-Anything
-        
-        Args:
-            job_id: Processing job ID
-            user_id: User ID
-            project_id: Project ID
-            workspace_id: Workspace ID
-            gcs_path: GCS path to the document
-            parser: Parser to use (mineru or docling)
-            parse_method: Parse method (auto, ocr, txt)
-            model: LLM model to use
-            config: Additional configuration
-            
-        Returns:
-            Processing result
-        """
+        """Process a single document with LlamaIndex"""
         start_time = datetime.utcnow()
         local_file_path = None
         
@@ -202,20 +124,44 @@ class RAGProcessingService:
             logger.info(f"Downloading document from GCS: {gcs_path}")
             local_file_path = await self.gcs_manager.download_file(gcs_path)
             
-            # Process document with RAG-Anything directly
-            logger.info(f"Processing document with RAG-Anything: {local_file_path}")
+            # Process document with LlamaIndex
+            logger.info(f"Processing document with LlamaIndex: {local_file_path}")
             
-            # Process the document using the new API
-            await self.rag_anything.process_document_complete(
-                file_path=local_file_path,
-                output_dir=self.temp_dir,
-                parse_method=parse_method
-            )
+            # Create documents
+            if self.llama_parse and parser == "llamaparse":
+                # Use LlamaParse for advanced parsing
+                documents = await self.llama_parse.aload_data(local_file_path)
+            else:
+                # Use simple directory reader
+                reader = SimpleDirectoryReader(input_files=[local_file_path])
+                documents = reader.load_data()
+            
+            # Create or load index
+            if self.vector_store:
+                # Use Google Vector Store
+                storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
+                index = VectorStoreIndex.from_documents(
+                    documents, 
+                    storage_context=storage_context
+                )
+            else:
+                # Use local storage
+                index_path = os.path.join(self.storage_dir, f"index_{project_id}")
+                if os.path.exists(index_path):
+                    storage_context = StorageContext.from_defaults(persist_dir=index_path)
+                    index = load_index_from_storage(storage_context)
+                    # Add new documents to existing index
+                    for doc in documents:
+                        index.insert(doc)
+                else:
+                    index = VectorStoreIndex.from_documents(documents)
+                    index.storage_context.persist(persist_dir=index_path)
             
             result = {
                 'success': True,
-                'source': 'raganything_processed',
-                'graph_created': True
+                'source': 'llamaindex_processed',
+                'index_created': True,
+                'document_count': len(documents)
             }
             
             # Calculate processing time
@@ -237,10 +183,8 @@ class RAGProcessingService:
                     'local_path': local_file_path,
                     'rag_result': result,
                     'storage_info': {
-                        'kv_storage_path': self.kv_storage_path,
-                        'vector_storage_path': self.vector_storage_path,
-                        'graph_storage_path': self.graph_storage_path,
-                        'doc_status_storage_path': self.doc_status_storage_path
+                        'index_path': os.path.join(self.storage_dir, f"index_{project_id}"),
+                        'vector_store_type': 'google' if self.vector_store else 'local'
                     }
                 }
             })
@@ -249,7 +193,7 @@ class RAGProcessingService:
             await self.firebase_manager.update_project_processing_status(
                 project_id,
                 'completed',
-                f'Document processed successfully: {Path(gcs_path).name}',
+                f'Document processed successfully with LlamaIndex: {Path(gcs_path).name}',
                 {
                     'processing_time': processing_time,
                     'document_count': 1,
@@ -259,7 +203,7 @@ class RAGProcessingService:
                 }
             )
             
-            logger.info(f"Successfully processed document: {gcs_path}")
+            logger.info(f"Successfully processed document with LlamaIndex: {gcs_path}")
             
             return {
                 'success': True,
@@ -309,36 +253,19 @@ class RAGProcessingService:
         workspace_id: str,
         gcs_folder_path: str,
         file_extensions: List[str] = None,
-        parser: str = "mineru",
+        parser: str = "llamaparse",
         parse_method: str = "auto",
-        model: str = "gpt-4",
+        model: str = "gpt-4o-mini",
         config: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """
-        Process all documents in a folder with RAG-Anything
-        
-        Args:
-            job_id: Processing job ID
-            user_id: User ID
-            project_id: Project ID
-            workspace_id: Workspace ID
-            gcs_folder_path: GCS path to the folder
-            file_extensions: List of file extensions to process
-            parser: Parser to use (mineru or docling)
-            parse_method: Parse method (auto, ocr, txt)
-            model: LLM model to use
-            config: Additional configuration
-            
-        Returns:
-            Processing result
-        """
+        """Process all documents in a folder with LlamaIndex"""
         start_time = datetime.utcnow()
         downloaded_files = {}
         
         try:
             # Set default file extensions
             if file_extensions is None:
-                file_extensions = [".pdf", ".doc", ".docx", ".txt", ".md", ".jpg", ".png", ".bmp", ".tiff"]
+                file_extensions = [".pdf", ".doc", ".docx", ".txt", ".md"]
             
             # List files in folder
             logger.info(f"Listing files in folder: {gcs_folder_path}")
@@ -369,9 +296,8 @@ class RAGProcessingService:
             if not downloaded_files:
                 raise ValueError("Failed to download any files from GCS")
             
-            # Use the initialized RAG-Anything instance
-            
-            # Process each document
+            # Process all documents
+            all_documents = []
             processed_count = 0
             failed_count = 0
             processing_results = []
@@ -392,19 +318,20 @@ class RAGProcessingService:
                         }
                     })
                     
-                    # Process the document using the new API
-                    result = await self.rag_anything.process_document_complete(
-                        file_path=local_path,
-                        output_dir=self.temp_dir,
-                        parse_method=parse_method
-                    )
+                    # Create documents
+                    if self.llama_parse and parser == "llamaparse":
+                        documents = await self.llama_parse.aload_data(local_path)
+                    else:
+                        reader = SimpleDirectoryReader(input_files=[local_path])
+                        documents = reader.load_data()
                     
+                    all_documents.extend(documents)
                     processed_count += 1
                     processing_results.append({
                         'gcs_path': gcs_path,
                         'local_path': local_path,
                         'success': True,
-                        'result': result
+                        'document_count': len(documents)
                     })
                     
                     logger.info(f"Successfully processed: {gcs_path}")
@@ -419,6 +346,25 @@ class RAGProcessingService:
                         'error': str(e)
                     })
                     continue
+            
+            # Create index from all documents
+            if all_documents:
+                if self.vector_store:
+                    storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
+                    index = VectorStoreIndex.from_documents(
+                        all_documents, 
+                        storage_context=storage_context
+                    )
+                else:
+                    index_path = os.path.join(self.storage_dir, f"index_{project_id}")
+                    if os.path.exists(index_path):
+                        storage_context = StorageContext.from_defaults(persist_dir=index_path)
+                        index = load_index_from_storage(storage_context)
+                        for doc in all_documents:
+                            index.insert(doc)
+                    else:
+                        index = VectorStoreIndex.from_documents(all_documents)
+                        index.storage_context.persist(persist_dir=index_path)
             
             # Calculate processing time
             processing_time = (datetime.utcnow() - start_time).total_seconds()
@@ -441,10 +387,8 @@ class RAGProcessingService:
                     'folder_path': gcs_folder_path,
                     'processing_results': processing_results,
                     'storage_info': {
-                        'kv_storage_path': self.kv_storage_path,
-                        'vector_storage_path': self.vector_storage_path,
-                        'graph_storage_path': self.graph_storage_path,
-                        'doc_status_storage_path': self.doc_status_storage_path
+                        'index_path': os.path.join(self.storage_dir, f"index_{project_id}"),
+                        'vector_store_type': 'google' if self.vector_store else 'local'
                     }
                 }
             })
@@ -453,7 +397,7 @@ class RAGProcessingService:
             await self.firebase_manager.update_project_processing_status(
                 project_id,
                 'completed',
-                f'Folder processed successfully: {processed_count}/{total_files} documents processed',
+                f'Folder processed successfully with LlamaIndex: {processed_count}/{total_files} documents processed',
                 {
                     'processing_time': processing_time,
                     'total_files': total_files,
@@ -465,7 +409,7 @@ class RAGProcessingService:
                 }
             )
             
-            logger.info(f"Successfully processed folder: {gcs_folder_path} ({processed_count}/{total_files} documents)")
+            logger.info(f"Successfully processed folder with LlamaIndex: {gcs_folder_path} ({processed_count}/{total_files} documents)")
             
             return {
                 'success': True,
@@ -512,17 +456,24 @@ class RAGProcessingService:
                     logger.warning(f"Failed to cleanup temporary files: {e}")
     
     async def get_processing_status(self, job_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Get processing status for a job
-        
-        Args:
-            job_id: Job ID
-            
-        Returns:
-            Job status information or None if not found
-        """
+        """Get processing status for a job"""
         try:
             return await self.firebase_manager.get_rag_processing_job(job_id)
         except Exception as e:
             logger.error(f"Error getting processing status for job {job_id}: {e}")
             return None
+    
+    def get_approach_name(self) -> str:
+        """Get the name of this RAG approach"""
+        return "LlamaIndex"
+    
+    def get_supported_parsers(self) -> List[str]:
+        """Get list of supported parsers for this approach"""
+        parsers = ["simple"]
+        if self.llama_parse:
+            parsers.append("llamaparse")
+        return parsers
+    
+    def get_supported_models(self) -> List[str]:
+        """Get list of supported models for this approach"""
+        return ["gpt-4", "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"]

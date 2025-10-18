@@ -22,18 +22,12 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
-
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
 
 # Unit test / coverage reports
 htmlcov/
-.tox/
-.nox/
 .coverage
 .coverage.*
 .cache
@@ -45,58 +39,9 @@ coverage.xml
 .pytest_cache/
 cover/
 
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
+# Logs
 *.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-.python-version
-
-# pipenv
-Pipfile.lock
-
-# poetry
-poetry.lock
-
-# pdm
-.pdm.toml
-
-# PEP 582
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
+logs/
 
 # Environments
 .env
@@ -107,29 +52,13 @@ ENV/
 env.bak/
 venv.bak/
 
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
+# pyenv
+.python-version
 
 # mypy
 .mypy_cache/
 .dmypy.json
 dmypy.json
-
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
 
 # PyCharm
 .idea/
@@ -150,10 +79,6 @@ temp/
 *.db
 *.sqlite
 
-# Logs
-*.log
-logs/
-
 # OS
 .DS_Store
 .DS_Store?
@@ -163,9 +88,6 @@ logs/
 ehthumbs.db
 Thumbs.db
 
-# Docker
-.dockerignore
-
 # Temporary files
 *.tmp
 *.temp
@@ -174,19 +96,8 @@ Thumbs.db
 *~
 
 # RAG-Anything specific
-rag_storage/
-rag_temp/
-*.pdf
-*.doc
-*.docx
-*.txt
-*.md
-*.jpg
-*.png
-*.bmp
-*.tiff
-*.gif
-*.webp
+storage/
+temp/
 
 # Monitoring
 prometheus_data/
