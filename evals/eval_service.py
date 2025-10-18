@@ -328,6 +328,12 @@ class EvaluationService:
                     value = await self._calculate_completeness(evaluation_case, actual_outputs)
                 elif metric_type == MetricType.RELEVANCE:
                     value = await self._calculate_relevance(evaluation_case, actual_outputs)
+                elif metric_type == MetricType.LLM_COMPLETENESS:
+                    value = await self._calculate_llm_completeness(evaluation_case, actual_outputs)
+                elif metric_type == MetricType.LLM_ACCURACY:
+                    value = await self._calculate_llm_accuracy(evaluation_case, actual_outputs)
+                elif metric_type == MetricType.LLM_COHERENCE:
+                    value = await self._calculate_llm_coherence(evaluation_case, actual_outputs)
                 else:
                     # Default to 0 for unimplemented metrics
                     value = 0.0
@@ -456,6 +462,123 @@ class EvaluationService:
             
         except Exception as e:
             logger.warning(f"Error calculating relevance: {e}")
+            return 0.0
+    
+    async def _calculate_llm_completeness(
+        self,
+        evaluation_case: EvaluationCase,
+        actual_outputs: Dict[str, Any]
+    ) -> float:
+        """Calculate completeness using LLM-as-a-Judge for unstructured content"""
+        
+        try:
+            if not evaluation_case.expected_outputs:
+                return 1.0
+            
+            # Prepare expected outputs for LLM evaluation
+            expected_descriptions = []
+            for expected in evaluation_case.expected_outputs:
+                expected_descriptions.append(f"- {expected.description or expected.type}: {expected.content}")
+            
+            expected_text = "\n".join(expected_descriptions)
+            actual_text = str(actual_outputs)
+            
+            response = await self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an expert evaluator. Rate how completely the actual output covers the expected information on a scale of 0-1, where 1 means all expected information is present. Consider that the actual output may express the same information in different words. Respond with only a number."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Expected Information:\n{expected_text}\n\nActual Output: {actual_text[:1500]}..."
+                    }
+                ],
+                max_tokens=10,
+                temperature=0
+            )
+            
+            completeness_score = float(response.choices[0].message.content.strip())
+            return max(0.0, min(1.0, completeness_score))  # Clamp to [0, 1]
+            
+        except Exception as e:
+            logger.warning(f"Error calculating LLM completeness: {e}")
+            return 0.0
+    
+    async def _calculate_llm_accuracy(
+        self,
+        evaluation_case: EvaluationCase,
+        actual_outputs: Dict[str, Any]
+    ) -> float:
+        """Calculate accuracy using LLM-as-a-Judge for unstructured content"""
+        
+        try:
+            if not evaluation_case.expected_outputs:
+                return 1.0
+            
+            # Prepare expected outputs for LLM evaluation
+            expected_descriptions = []
+            for expected in evaluation_case.expected_outputs:
+                expected_descriptions.append(f"- {expected.description or expected.type}: {expected.content}")
+            
+            expected_text = "\n".join(expected_descriptions)
+            actual_text = str(actual_outputs)
+            
+            response = await self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an expert evaluator. Rate the accuracy of the actual output compared to the expected information on a scale of 0-1, where 1 means the information is completely accurate. Consider that the actual output may express the same information in different words. Respond with only a number."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Expected Information:\n{expected_text}\n\nActual Output: {actual_text[:1500]}..."
+                    }
+                ],
+                max_tokens=10,
+                temperature=0
+            )
+            
+            accuracy_score = float(response.choices[0].message.content.strip())
+            return max(0.0, min(1.0, accuracy_score))  # Clamp to [0, 1]
+            
+        except Exception as e:
+            logger.warning(f"Error calculating LLM accuracy: {e}")
+            return 0.0
+    
+    async def _calculate_llm_coherence(
+        self,
+        evaluation_case: EvaluationCase,
+        actual_outputs: Dict[str, Any]
+    ) -> float:
+        """Calculate coherence using LLM-as-a-Judge"""
+        
+        try:
+            actual_text = str(actual_outputs)
+            
+            response = await self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are an expert evaluator. Rate the coherence and logical flow of the actual output on a scale of 0-1, where 1 means the output is well-structured, logical, and easy to follow. Respond with only a number."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Actual Output: {actual_text[:1500]}..."
+                    }
+                ],
+                max_tokens=10,
+                temperature=0
+            )
+            
+            coherence_score = float(response.choices[0].message.content.strip())
+            return max(0.0, min(1.0, coherence_score))  # Clamp to [0, 1]
+            
+        except Exception as e:
+            logger.warning(f"Error calculating LLM coherence: {e}")
             return 0.0
     
     def _find_expected_in_actual(

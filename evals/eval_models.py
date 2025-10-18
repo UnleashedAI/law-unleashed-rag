@@ -30,6 +30,10 @@ class MetricType(str, Enum):
     RELEVANCE = "relevance"
     COMPLETENESS = "completeness"
     COHERENCE = "coherence"
+    # LLM-based metrics for unstructured content
+    LLM_COMPLETENESS = "llm_completeness"
+    LLM_ACCURACY = "llm_accuracy"
+    LLM_COHERENCE = "llm_coherence"
 
 
 class EvaluationStatus(str, Enum):
@@ -42,11 +46,12 @@ class EvaluationStatus(str, Enum):
 
 
 class ExpectedOutput(BaseModel):
-    """Expected output for a test case"""
+    """Expected output for a test case - optimized for unstructured content evaluation"""
     type: str = Field(..., description="Type of expected output (entities, facts, summary, etc.)")
-    content: Union[str, List[str], Dict[str, Any]] = Field(..., description="Expected content")
+    content: Union[str, List[str], Dict[str, Any]] = Field(..., description="Expected content - can be unstructured text, lists, or any format")
     weight: float = Field(default=1.0, description="Weight for this output in scoring")
-    description: Optional[str] = Field(default=None, description="Description of expected output")
+    description: Optional[str] = Field(default=None, description="Human-readable description of what should be found - used by LLM-as-a-Judge")
+    # For unstructured content, description is often more important than structured content
 
 
 class EvaluationCriteria(BaseModel):
