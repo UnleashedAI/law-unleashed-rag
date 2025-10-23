@@ -565,6 +565,66 @@ class RAGVertexService(RAGInterface):
                                             "type": "retrieval_result"
                                         })
             
+            # Also check for citation metadata in the response
+            if hasattr(response, 'candidates') and response.candidates:
+                for candidate in response.candidates:
+                    # Check citation_metadata
+                    if hasattr(candidate, 'citation_metadata') and candidate.citation_metadata:
+                        logger.info(f"Found citation_metadata: {candidate.citation_metadata}")
+                        if hasattr(candidate.citation_metadata, 'citation_sources'):
+                            for citation_source in candidate.citation_metadata.citation_sources:
+                                sources.append({
+                                    "content": f"Citation from {getattr(citation_source, 'uri', 'unknown source')}",
+                                    "type": "citation",
+                                    "metadata": {
+                                        "uri": getattr(citation_source, 'uri', None),
+                                        "start_index": getattr(citation_source, 'start_index', None),
+                                        "end_index": getattr(citation_source, 'end_index', None)
+                                    }
+                                })
+                    
+                    # Check grounding_metadata (this is where RAG sources are typically stored)
+                    if hasattr(candidate, 'grounding_metadata') and candidate.grounding_metadata:
+                        logger.info(f"Found grounding_metadata: {candidate.grounding_metadata}")
+                        if hasattr(candidate.grounding_metadata, 'grounding_chunks'):
+                            for chunk in candidate.grounding_metadata.grounding_chunks:
+                                # Extract content from retrieved_context.text
+                                content = "No content available"
+                                uri = None
+                                title = None
+                                
+                                if hasattr(chunk, 'retrieved_context') and chunk.retrieved_context:
+                                    content = getattr(chunk.retrieved_context, 'text', 'No content available')
+                                    uri = getattr(chunk.retrieved_context, 'uri', None)
+                                    title = getattr(chunk.retrieved_context, 'title', None)
+                                
+                                sources.append({
+                                    "content": content,
+                                    "type": "grounding_chunk",
+                                    "metadata": {
+                                        "uri": uri,
+                                        "title": title,
+                                        "confidence_score": None  # Will be extracted from grounding_supports
+                                    }
+                                })
+                        
+                        # Also extract grounding_supports for confidence scores and text segments
+                        if hasattr(candidate.grounding_metadata, 'grounding_supports'):
+                            for i, support in enumerate(candidate.grounding_metadata.grounding_supports):
+                                if i < len(sources):  # Match with corresponding grounding_chunk
+                                    if hasattr(support, 'confidence_scores') and support.confidence_scores:
+                                        sources[i]["metadata"]["confidence_score"] = support.confidence_scores[0] if support.confidence_scores else None
+                                    if hasattr(support, 'segment') and support.segment:
+                                        sources[i]["metadata"]["segment_text"] = getattr(support.segment, 'text', None)
+            
+            # Log the response structure for debugging
+            logger.info(f"Response structure: {type(response)}")
+            logger.info(f"Response attributes: {dir(response)}")
+            if hasattr(response, 'candidates'):
+                logger.info(f"Number of candidates: {len(response.candidates) if response.candidates else 0}")
+                if response.candidates:
+                    logger.info(f"First candidate attributes: {dir(response.candidates[0])}")
+            
             return {
                 'success': True,
                 'answer': answer,

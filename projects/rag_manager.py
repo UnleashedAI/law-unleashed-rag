@@ -185,15 +185,48 @@ async def main():
             print(f"💡 Use 'python rag_manager.py status {job_id}' to check progress")
             
         elif command == "query":
-            if len(sys.argv) != 4:
-                print("Usage: python rag_manager.py query <storage_key> <query>")
+            if len(sys.argv) < 4:
+                print("Usage: python rag_manager.py query <storage_key> <query> [--debug]")
                 sys.exit(1)
+            
+            # Check for debug flag
+            debug_mode = "--debug" in sys.argv
             
             storage_key = sys.argv[2]
             query = sys.argv[3]
             print(f"🔍 Querying {storage_key}...")
             result = await manager.query_database(storage_key, query)
+            
             print(f"📝 Answer: {result.get('answer', 'No answer found')}")
+            
+            # Show sources if available
+            sources = result.get('sources', [])
+            if sources:
+                print(f"\n📚 Sources ({len(sources)} found):")
+                for i, source in enumerate(sources, 1):
+                    print(f"  {i}. {source.get('content', 'No content')[:200]}...")
+                    if 'metadata' in source:
+                        print(f"     Metadata: {source['metadata']}")
+                    if 'score' in source:
+                        print(f"     Score: {source['score']}")
+            
+            # Show metadata if available
+            metadata = result.get('metadata', {})
+            if metadata:
+                print(f"\n📊 Metadata:")
+                for key, value in metadata.items():
+                    print(f"  {key}: {value}")
+            
+            # Show processing time if available
+            processing_time = result.get('processing_time')
+            if processing_time:
+                print(f"\n⏱️  Processing time: {processing_time:.2f} seconds")
+            
+            # Show raw response in debug mode
+            if debug_mode:
+                print(f"\n🔍 Debug - Raw Response:")
+                import json
+                print(json.dumps(result, indent=2, default=str))
             
         elif command == "list":
             databases = manager.list_rag_databases()
