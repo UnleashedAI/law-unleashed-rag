@@ -660,7 +660,8 @@ class RAGAnythingService(RAGInterface):
         project_id: str,
         query: str,
         model: str = "gpt-4o-mini",
-        config: Optional[Dict[str, Any]] = None
+        config: Optional[Dict[str, Any]] = None,
+        corpus_info: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Query processed documents
@@ -671,6 +672,7 @@ class RAGAnythingService(RAGInterface):
             query: Query to ask about the documents
             model: LLM model to use for answering
             config: Additional configuration
+            corpus_info: RAG corpus information (not used by RAGAnything, for compatibility)
             
         Returns:
             Query result with answer, sources, and metadata

@@ -118,9 +118,12 @@ class RAGManager:
                 "project_id": storage_key,  # Use storage_key as project_id for RAG service identification
                 "rag_approach": config["rag_approach"],
                 "query": query,
-                "model": config["model"],
-                "corpus_info": config.get("corpus_info")  # Pass corpus info if available
+                "model": config["model"]
             }
+            
+            # Only add corpus_info for vertex_rag approach
+            if config["rag_approach"] == "rag_vertex" and config.get("corpus_info"):
+                payload["corpus_info"] = config.get("corpus_info")
             
             async with session.post(f"{self.api_base}/query", json=payload) as response:
                 if response.status == 200:
