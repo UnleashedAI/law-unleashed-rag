@@ -153,7 +153,7 @@ class FirebaseManager:
             metadata: Additional metadata
         """
         try:
-            doc_ref = self.db.collection('projects').document(project_id)
+            doc_ref = self.db.collection('rag_projects').document(project_id)
             
             update_data = {
                 'graphProcessingStatus': status,
@@ -166,7 +166,7 @@ class FirebaseManager:
             if metadata:
                 update_data['graphProcessingMetadata'] = metadata
             
-            doc_ref.update(update_data)
+            doc_ref.set(update_data, merge=True)
             
             logger.info(f"Updated processing status for project {project_id}: {status}")
             

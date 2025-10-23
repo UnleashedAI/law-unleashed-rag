@@ -10,18 +10,18 @@ from src.services.rag_anything_service import RAGAnythingService
 logger = logging.getLogger(__name__)
 
 # Conditionally import other RAG services
-LlamaIndexService = None
 EvidenceSweepService = None
-
-try:
-    from src.services.llamaindex_service import LlamaIndexService
-except ImportError as e:
-    logger.warning(f"LlamaIndex service not available: {e}")
+RAGVertexService = None
 
 try:
     from src.services.evidence_sweep_service import EvidenceSweepService
 except ImportError as e:
     logger.warning(f"EvidenceSweep service not available: {e}")
+
+try:
+    from src.services.rag_vertex_service import RAGVertexService
+except ImportError as e:
+    logger.warning(f"RAG Vertex service not available: {e}")
 
 
 class RAGFactory:
@@ -33,11 +33,11 @@ class RAGFactory:
             "raganything": RAGAnythingService,
         }
         
-        if LlamaIndexService is not None:
-            self._implementations["llamaindex"] = LlamaIndexService
-            
         if EvidenceSweepService is not None:
             self._implementations["evidence_sweep"] = EvidenceSweepService
+            
+        if RAGVertexService is not None:
+            self._implementations["rag_vertex"] = RAGVertexService
     
     def create_rag_service(
         self, 
@@ -50,7 +50,7 @@ class RAGFactory:
         Create a RAG service instance
         
         Args:
-            approach: RAG approach name (raganything, llamaindex, evidence_sweep)
+            approach: RAG approach name (raganything, evidence_sweep, rag_vertex)
             firebase_manager: Firebase manager instance
             gcs_manager: GCS manager instance
             auth_service: Auth service instance

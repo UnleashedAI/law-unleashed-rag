@@ -70,7 +70,7 @@ python evals/evals_cli.py get-suite chiropractic_records
 
 # Start an evaluation
 python evals/evals_cli.py start-eval chiropractic_records \
-  --approaches raganything llamaindex evidence_sweep \
+  --approaches raganything evidence_sweep rag_vertex \
   --user-id 7CtdhckRcxOIjU3Dh7Ao3jvigg13 \
   --project-id 1lUOSTzmKN7GC5cjgiLI \
   --name "Chiropractic Records Comparison"
@@ -115,8 +115,8 @@ results/
 │   │   ├── README.md             # Human-readable summary
 │   │   └── test_cases/           # Individual test case results
 │   │       ├── test_case_1_raganything.json
-│   │       ├── test_case_1_llamaindex.json
-│   │       └── test_case_1_evidence_sweep.json
+│   │       ├── test_case_1_evidence_sweep.json
+│   │       └── test_case_1_rag_vertex.json
 │   └── comparisons/              # Comparison reports
 │       └── comparison_143022.md
 └── 2024-01-16/

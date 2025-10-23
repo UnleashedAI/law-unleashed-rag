@@ -415,6 +415,18 @@ async def get_processing_status(
                     detail="User does not have access to this job"
                 )
             
+            # Extract corpus information from result if available
+            corpus_info = None
+            result = job_info.get('result')
+            if result and 'storage_info' in result:
+                storage_info = result['storage_info']
+                if 'corpus_name' in storage_info:
+                    corpus_info = {
+                        'corpus_name': storage_info['corpus_name'],
+                        'gcs_bucket': storage_info.get('gcs_bucket'),
+                        'gcs_folder_path': storage_info.get('gcs_folder_path')
+                    }
+            
             REQUEST_COUNT.labels(method="GET", endpoint="/processing-status", status="200").inc()
             return ProcessingStatusResponse(
                 job_id=job_id,
@@ -424,7 +436,8 @@ async def get_processing_status(
                 created_at=job_info.get('createdAt'),
                 updated_at=job_info.get('updatedAt'),
                 error_message=job_info.get('errorMessage'),
-                result=job_info.get('result')
+                result=result,
+                corpus_info=corpus_info
             )
             
         except HTTPException:
@@ -556,7 +569,8 @@ async def query_documents(
                 project_id=request.project_id,
                 query=request.query,
                 model=request.model,
-                config=request.config
+                config=request.config,
+                corpus_info=request.corpus_info
             )
             
             processing_time = time.time() - start_time

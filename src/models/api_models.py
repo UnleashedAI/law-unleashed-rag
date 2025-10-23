@@ -13,7 +13,7 @@ class ProcessDocumentRequest(BaseModel):
     project_id: str = Field(..., description="Project ID")
     workspace_id: str = Field(..., description="Workspace ID")
     gcs_path: str = Field(..., description="GCS path to the document")
-    rag_approach: str = Field(default="raganything", description="RAG approach: raganything, llamaindex, or evidence_sweep")
+    rag_approach: str = Field(default="raganything", description="RAG approach: raganything, evidence_sweep, or rag_vertex")
     parser: str = Field(default="mineru", description="Parser to use: mineru, docling, llamaparse, or simple")
     parse_method: str = Field(default="auto", description="Parse method: auto, ocr, or txt")
     model: str = Field(default="gpt-4", description="LLM model to use")
@@ -26,7 +26,7 @@ class ProcessFolderRequest(BaseModel):
     project_id: str = Field(..., description="Project ID")
     workspace_id: str = Field(..., description="Workspace ID")
     gcs_folder_path: str = Field(..., description="GCS path to the folder")
-    rag_approach: str = Field(default="raganything", description="RAG approach: raganything, llamaindex, or evidence_sweep")
+    rag_approach: str = Field(default="raganything", description="RAG approach: raganything, evidence_sweep, or rag_vertex")
     parser: str = Field(default="mineru", description="Parser to use: mineru, docling, llamaparse, or simple")
     parse_method: str = Field(default="auto", description="Parse method: auto, ocr, or txt")
     model: str = Field(default="gpt-4", description="LLM model to use")
@@ -55,6 +55,7 @@ class ProcessingStatusResponse(BaseModel):
     updated_at: datetime = Field(..., description="Last update time")
     error_message: Optional[str] = Field(default=None, description="Error message if failed")
     result: Optional[Dict[str, Any]] = Field(default=None, description="Processing result")
+    corpus_info: Optional[Dict[str, Any]] = Field(default=None, description="RAG corpus information for Vertex AI")
 
 
 class HealthResponse(BaseModel):
@@ -89,10 +90,11 @@ class QueryRequest(BaseModel):
     """Request model for querying processed documents"""
     user_id: str = Field(..., description="User ID")
     project_id: str = Field(..., description="Project ID")
-    rag_approach: str = Field(..., description="RAG approach to use: raganything, llamaindex, or evidence_sweep")
+    rag_approach: str = Field(..., description="RAG approach to use: raganything, evidence_sweep, or rag_vertex")
     query: str = Field(..., description="Query to ask about the documents")
     model: str = Field(default="gpt-4o-mini", description="LLM model to use for answering")
     config: Optional[Dict[str, Any]] = Field(default=None, description="Additional configuration")
+    corpus_info: Optional[Dict[str, Any]] = Field(default=None, description="RAG corpus information for Vertex AI")
 
 
 class QueryResponse(BaseModel):

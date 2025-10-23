@@ -266,7 +266,7 @@ async def main():
     # Start evaluation
     eval_parser = subparsers.add_parser("start-eval", help="Start a new evaluation")
     eval_parser.add_argument("suite_id", help="Evaluation suite ID")
-    eval_parser.add_argument("--approaches", nargs="+", default=["raganything", "llamaindex", "evidence_sweep"], help="RAG approaches to evaluate")
+    eval_parser.add_argument("--approaches", nargs="+", default=["raganything", "evidence_sweep", "rag_vertex"], help="RAG approaches to evaluate")
     eval_parser.add_argument("--user-id", required=True, help="User ID")
     eval_parser.add_argument("--project-id", required=True, help="Project ID")
     eval_parser.add_argument("--name", required=True, help="Evaluation name")

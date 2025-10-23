@@ -6,7 +6,7 @@ A FastAPI-based service for testing and comparing multiple RAG (Retrieval-Augmen
 
 - **Multiple RAG Approaches**: 
   - **RAGAnything**: Original implementation using RAG-Anything framework
-  - **LlamaIndex**: Modern approach with LlamaParse and Google Vector Store
+  - **Vertex AI RAG**: Google Cloud's native RAG engine with Gemini models
   - **EvidenceSweep**: Custom approach with page selection, evidence pass, and synthesis
 - **Document Processing**: Process individual documents from Google Cloud Storage
 - **Folder Processing**: Process all documents in a GCS folder
@@ -24,7 +24,7 @@ A FastAPI-based service for testing and comparing multiple RAG (Retrieval-Augmen
 │   FastAPI App   │    │  RAG Factory    │    │   Firestore     │
 │                 │    │                 │    │                 │
 │ • /process-doc  │───▶│ • RAGAnything   │───▶│ • Progress      │
-│ • /process-folder│   │ • LlamaIndex    │    │   Tracking      │
+│ • /process-folder│   │ • Vertex AI RAG │    │   Tracking      │
 │ • /rag-approaches│   │ • EvidenceSweep │    │ • Job Status    │
 │ • /status       │    │                 │    │                 │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
@@ -49,7 +49,7 @@ A FastAPI-based service for testing and comparing multiple RAG (Retrieval-Augmen
 - LibreOffice (for Office documents)
 - Tesseract (for OCR)
 - Llama Cloud API key (optional, for LlamaParse)
-- Google Cloud project with Vector Store (optional, for LlamaIndex)
+- Google Cloud project with Vertex AI enabled (for Vertex AI RAG)
 
 ### Local Development
 
@@ -68,9 +68,9 @@ A FastAPI-based service for testing and comparing multiple RAG (Retrieval-Augmen
    OPENAI_API_KEY=your-openai-api-key
    GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
    
-   # Optional: LlamaIndex configuration
-   LLAMA_CLOUD_API_KEY=your-llama-cloud-api-key
+   # Optional: Vertex AI configuration
    GOOGLE_PROJECT_ID=your-google-project-id
+   GOOGLE_REGION=us-central1
    GOOGLE_VECTOR_STORE_ID=your-vector-store-id
    ```
 
@@ -114,12 +114,12 @@ A FastAPI-based service for testing and comparing multiple RAG (Retrieval-Augmen
 - **Storage**: Local JSON, NanoVector, Faiss, NetworkX
 - **Best for**: Complex documents with tables, images, and structured content
 
-### LlamaIndex
-- **Description**: Modern approach using LlamaIndex with LlamaParse and Google Vector Store
-- **Strengths**: Advanced parsing, cloud-native vector storage, flexible indexing
-- **Parsers**: LlamaParse, Simple
-- **Storage**: Google Vector Store, Local storage
-- **Best for**: Large-scale document processing with cloud integration
+### Vertex AI RAG
+- **Description**: Google Cloud's native RAG engine using Gemini models and Vertex AI
+- **Strengths**: Native GCP integration, advanced LLM parsing, cloud-native vector storage
+- **Parsers**: LLM Parser (Gemini), Auto
+- **Models**: Gemini-2.0-flash-001, Gemini-1.5-pro, Gemini-1.5-flash, Gemini-1.0-pro
+- **Best for**: GCP-native deployments, advanced document understanding
 
 ### EvidenceSweep
 - **Description**: Custom approach with page selection, evidence pass, and synthesis
@@ -148,11 +148,11 @@ curl "http://localhost:8000/rag-approaches"
       "supported_models": ["gpt-4", "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"],
       "description": "RAG approach using RAGAnything"
     },
-    "llamaindex": {
-      "name": "LlamaIndex",
-      "supported_parsers": ["simple", "llamaparse"],
-      "supported_models": ["gpt-4", "gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"],
-      "description": "RAG approach using LlamaIndex"
+    "rag_vertex": {
+      "name": "Vertex AI RAG",
+      "supported_parsers": ["llm_parser", "auto"],
+      "supported_models": ["gemini-2.0-flash-001", "gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"],
+      "description": "RAG approach using Vertex AI"
     },
     "evidence_sweep": {
       "name": "EvidenceSweep",
@@ -177,8 +177,8 @@ curl -X POST "http://localhost:8000/process-document" \
     "project_id": "project456",
     "workspace_id": "workspace789",
     "gcs_path": "gs://bucket/path/to/document.pdf",
-    "rag_approach": "llamaindex",
-    "parser": "llamaparse",
+    "rag_approach": "rag_vertex",
+    "parser": "llm_parser",
     "parse_method": "auto",
     "model": "gpt-4o-mini"
   }'
@@ -189,7 +189,7 @@ curl -X POST "http://localhost:8000/process-document" \
 {
   "job_id": "uuid-here",
   "status": "pending",
-  "message": "Document processing job created successfully with llamaindex",
+  "message": "Document processing job created successfully with rag_vertex",
   "created_at": "2024-01-01T00:00:00Z"
 }
 ```
@@ -272,7 +272,7 @@ curl "http://localhost:8000/project-jobs/project456?user_id=user123"
 | `PORT` | Service port | No | `8000` |
 | `LOG_LEVEL` | Logging level | No | `info` |
 | `RAG_STORAGE_DIR` | RAGAnything storage directory | No | `/app/storage` |
-| `LLAMAINDEX_STORAGE_DIR` | LlamaIndex storage directory | No | `/app/storage/llamaindex` |
+| `VERTEX_AI_REGION` | Vertex AI region | No | `us-central1` |
 | `EVIDENCE_SWEEP_STORAGE_DIR` | EvidenceSweep storage directory | No | `/app/storage/evidence_sweep` |
 | `RAG_TEMP_DIR` | Temp directory | No | `/app/temp` |
 | `PARSER` | Default parser | No | `mineru` |
@@ -292,9 +292,9 @@ The service uses approach-specific storage backends:
 - **NetworkXStorage**: Graph storage for relationships
 - **JsonDocStatusStorage**: Document processing status
 
-#### LlamaIndex
-- **Google Vector Store**: Cloud-native vector storage (optional)
-- **Local Storage**: Local index persistence
+#### Vertex AI RAG
+- **Vertex AI RAG Store**: Cloud-native RAG corpus and vector storage
+- **Gemini Models**: Native integration with Google's Gemini models
 - **LlamaParse**: Advanced document parsing service
 
 #### EvidenceSweep
@@ -527,7 +527,7 @@ curl -X POST "http://localhost:8000/evaluations" \
   -H "Content-Type: application/json" \
   -d '{
     "test_suite_id": "legal_documents",
-    "rag_approaches": ["raganything", "llamaindex", "evidence_sweep"],
+    "rag_approaches": ["raganything", "evidence_sweep", "rag_vertex"],
     "user_id": "user123",
     "project_id": "project456",
     "name": "Legal Document Comparison",
@@ -560,7 +560,7 @@ python evals/evals_cli.py get-suite chiropractic_records
 
 # Start an evaluation
 python evals/evals_cli.py start-eval chiropractic_records \
-  --approaches raganything llamaindex evidence_sweep \
+  --approaches raganything evidence_sweep rag_vertex \
   --user-id 7CtdhckRcxOIjU3Dh7Ao3jvigg13 \
   --project-id 1lUOSTzmKN7GC5cjgiLI \
   --name "Chiropractic Records Comparison"

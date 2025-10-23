@@ -37,15 +37,16 @@ pytest-mock==3.12.0
 # Note: Install RAG-Anything manually after core dependencies are installed
 # pip install raganything
 
-# LlamaIndex dependencies
-llama-index>=0.10.0
-llama-index-llms-openai>=0.1.0
-llama-index-embeddings-openai>=0.1.0
-llama-index-vector-stores-google>=0.1.0
-llama-parse>=0.4.0
+# LlamaIndex dependencies removed - only using RAGAnything and Vertex AI services
 
 # OpenAI client for EvidenceSweep
 openai>=1.0.0
+
+# Vertex AI dependencies for RAG Vertex service (based on GCP RAG engine notebook)
+google-cloud-aiplatform>=1.38.0
+google-cloud-storage>=2.10.0
+google-generativeai>=0.3.0
+vertexai>=1.38.0
 
 # Additional dependencies for document processing
 pypdf>=3.0.0

@@ -74,7 +74,7 @@ def create_legal_document_evaluation_suite() -> EvaluationSuite:
         name="Legal Document Processing",
         description="Test suite for evaluating RAG approaches on legal documents",
         evaluation_cases=evaluation_cases,
-        default_rag_approaches=["raganything", "llamaindex", "evidence_sweep"],
+        default_rag_approaches=["raganything", "evidence_sweep", "rag_vertex"],
         tags=["legal", "documents", "comprehensive"]
     )
 
@@ -147,7 +147,7 @@ def create_medical_document_evaluation_suite() -> EvaluationSuite:
         name="Medical Document Processing",
         description="Test suite for evaluating RAG approaches on medical documents",
         evaluation_cases=evaluation_cases,
-        default_rag_approaches=["raganything", "llamaindex", "evidence_sweep"],
+        default_rag_approaches=["raganything", "evidence_sweep", "rag_vertex"],
         tags=["medical", "documents", "healthcare"]
     )
 
@@ -216,7 +216,7 @@ def create_performance_evaluation_suite() -> EvaluationSuite:
         name="Performance Evaluation",
         description="Test suite focused on performance and scalability metrics",
         evaluation_cases=evaluation_cases,
-        default_rag_approaches=["raganything", "llamaindex", "evidence_sweep"],
+        default_rag_approaches=["raganything", "evidence_sweep", "rag_vertex"],
         tags=["performance", "scalability", "benchmarking"]
     )
 
@@ -291,7 +291,7 @@ def create_comprehensive_evaluation_suite() -> EvaluationSuite:
         name="Comprehensive Evaluation",
         description="Comprehensive test suite covering all aspects of RAG evaluation",
         evaluation_cases=evaluation_cases,
-        default_rag_approaches=["raganything", "llamaindex", "evidence_sweep"],
+        default_rag_approaches=["raganything", "evidence_sweep", "rag_vertex"],
         tags=["comprehensive", "end-to-end", "multi-domain"]
     )
 

@@ -146,7 +146,7 @@ def create_chiropractic_records_evaluation_suite() -> EvaluationSuite:
         name="Chiropractic Medical Records",
         description="Test suite for evaluating RAG approaches on chiropractic medical records",
         evaluation_cases=evaluation_cases,
-        default_rag_approaches=["raganything", "llamaindex", "evidence_sweep"],
+        default_rag_approaches=["raganything", "evidence_sweep", "rag_vertex"],
         tags=["medical", "chiropractic", "real-world", "legal"]
     )
 
@@ -246,7 +246,7 @@ def create_law_unleashed_evaluation_suite() -> EvaluationSuite:
         name="Law Unleashed Comprehensive",
         description="Comprehensive test suite for law-unleashed legal document processing",
         evaluation_cases=evaluation_cases,
-        default_rag_approaches=["raganything", "llamaindex", "evidence_sweep"],
+        default_rag_approaches=["raganything", "evidence_sweep", "rag_vertex"],
         tags=["legal", "medical", "comprehensive", "real-world", "law-unleashed"]
     )
 

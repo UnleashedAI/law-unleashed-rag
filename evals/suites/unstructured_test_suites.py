@@ -172,7 +172,7 @@ def create_unstructured_medical_records_suite() -> EvaluationSuite:
         name="Unstructured Medical Records Evaluation",
         description="Test suite for evaluating RAG approaches on unstructured medical record processing using LLM-as-a-Judge",
         evaluation_cases=evaluation_cases,
-        default_rag_approaches=["raganything", "llamaindex", "evidence_sweep"],
+        default_rag_approaches=["raganything", "evidence_sweep", "rag_vertex"],
         tags=["medical", "unstructured", "narrative", "llm-judge", "legal", "insurance"]
     )
 

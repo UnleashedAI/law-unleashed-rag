@@ -75,16 +75,24 @@ class AuthService:
         
         Args:
             user_id: User ID
-            project_id: Project ID
+            project_id: Project ID (may be a storage key like "NbbabGQy3gkCJIDzkSoE_vertex_rag_1")
             
         Returns:
             True if user has access, False otherwise
         """
         try:
-            # Get project document
-            project_doc = await self.firebase_manager.get_project_document(project_id)
+            # Extract actual project ID from storage key if needed
+            # Storage keys are in format: "actual_project_id_approach_iteration"
+            actual_project_id = project_id
+            if '_' in project_id:
+                # Extract the first part before the first underscore as the actual project ID
+                actual_project_id = project_id.split('_')[0]
+                logger.info(f"Extracted project ID {actual_project_id} from storage key {project_id}")
+            
+            # Get project document using the actual project ID
+            project_doc = await self.firebase_manager.get_project_document(actual_project_id)
             if not project_doc:
-                logger.warning(f"Project {project_id} not found")
+                logger.warning(f"Project {actual_project_id} not found")
                 return False
             
             # Check if user is the project owner
