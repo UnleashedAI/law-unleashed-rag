@@ -30,18 +30,23 @@ evals/
 ├── __init__.py                 # Main evals module
 ├── README.md                   # This file
 ├── eval_models.py             # Evaluation data models
-├── evaluation_service.py      # Evaluation execution service
-├── evals_cli.py               # Command-line interface
+├── eval_service.py            # Evaluation execution service
+├── eval_cli.py                # Command-line interface
 ├── results_manager.py         # Results storage and organization
+├── requirements.txt           # Evaluation framework dependencies
 ├── suites/                    # Test suite definitions
 │   ├── __init__.py
 │   ├── sample_test_suites.py  # Sample test suites
-│   └── real_world_test_suites.py  # Real-world test suites
-├── runs/                      # Evaluation run configurations
+│   ├── real_world_test_suites.py  # Real-world test suites
+│   └── unstructured_test_suites.py  # LLM-as-a-Judge test suites
 └── results/                   # Evaluation results storage
     ├── YYYY-MM-DD/           # Results organized by date
     │   ├── evaluation_run_id/ # Individual evaluation results
-    │   └── comparisons/       # Comparison reports
+    │   │   ├── evaluation_results.json  # Complete results
+    │   │   ├── summary.json          # Summary information
+    │   │   ├── README.md             # Human-readable summary
+    │   │   └── evaluation_cases/     # Individual test case results
+    │   └── comparisons/       # Comparison reports (future)
     └── ...
 ```
 
@@ -63,29 +68,29 @@ evals/
 
 ```bash
 # List available evaluation suites
-python evals/evals_cli.py list-suites
+python evals/eval_cli.py list-suites
 
 # Get detailed evaluation suite information
-python evals/evals_cli.py get-suite chiropractic_records
+python evals/eval_cli.py get-suite chiropractic_records
 
 # Start an evaluation
-python evals/evals_cli.py start-eval chiropractic_records \
+python evals/eval_cli.py start-eval chiropractic_records \
   --approaches raganything evidence_sweep rag_vertex \
   --user-id 7CtdhckRcxOIjU3Dh7Ao3jvigg13 \
-  --project-id 1lUOSTzmKN7GC5cjgiLI \
+  --project-id NbbabGQy3gkCJIDzkSoE \
   --name "Chiropractic Records Comparison"
 
 # Monitor evaluation progress
-python evals/evals_cli.py monitor {evaluation_id} --user-id 7CtdhckRcxOIjU3Dh7Ao3jvigg13
+python evals/eval_cli.py monitor {evaluation_id} --user-id 7CtdhckRcxOIjU3Dh7Ao3jvigg13
 
 # Get evaluation results
-python evals/evals_cli.py results {evaluation_id} --user-id 7CtdhckRcxOIjU3Dh7Ao3jvigg13
+python evals/eval_cli.py results {evaluation_id} --user-id 7CtdhckRcxOIjU3Dh7Ao3jvigg13
 
 # List local results
-python evals/evals_cli.py list-results
+python evals/eval_cli.py list-results
 
 # Compare multiple evaluations
-python evals/evals_cli.py compare {eval_id1} {eval_id2} {eval_id3}
+python evals/eval_cli.py compare {eval_id1} {eval_id2} {eval_id3}
 ```
 
 ### Programmatic Usage
@@ -108,18 +113,17 @@ Evaluation results are automatically organized in the `results/` directory:
 
 ```
 results/
-├── 2024-01-15/                    # Date-based organization
-│   ├── eval_12345/               # Individual evaluation run
+├── 2025-10-23/                    # Date-based organization
+│   ├── 80da8297-b454-4e6b-bbe8-edbc8a5b043e/  # Individual evaluation run
 │   │   ├── evaluation_results.json  # Complete results
 │   │   ├── summary.json          # Summary information
 │   │   ├── README.md             # Human-readable summary
-│   │   └── test_cases/           # Individual test case results
-│   │       ├── test_case_1_raganything.json
-│   │       ├── test_case_1_evidence_sweep.json
-│   │       └── test_case_1_rag_vertex.json
-│   └── comparisons/              # Comparison reports
-│       └── comparison_143022.md
-└── 2024-01-16/
+│   │   └── evaluation_cases/     # Individual test case results
+│   │       ├── chiropractic_records_analysis_raganything.json
+│   │       ├── chiropractic_query_answering_raganything.json
+│   │       └── chiropractic_evidence_extraction_raganything.json
+│   └── comparisons/              # Comparison reports (future feature)
+└── 2025-10-24/
     └── ...
 ```
 

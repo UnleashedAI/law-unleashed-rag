@@ -50,6 +50,21 @@ class EvaluationResultsManager:
         
         return str(run_dir)
     
+    def load_evaluation_run(self, evaluation_run_id: str) -> Optional[Dict[str, Any]]:
+        """Load evaluation run results from storage"""
+        
+        # Search for the evaluation run in all date directories
+        for date_dir in self.results_dir.iterdir():
+            if date_dir.is_dir():
+                run_dir = date_dir / evaluation_run_id
+                if run_dir.exists():
+                    results_file = run_dir / "evaluation_results.json"
+                    if results_file.exists():
+                        with open(results_file, 'r') as f:
+                            return json.load(f)
+        
+        return None
+    
     def _extract_summary(self, results: Dict[str, Any]) -> Dict[str, Any]:
         """Extract summary information from evaluation results"""
         
@@ -145,7 +160,7 @@ class EvaluationResultsManager:
                         if run_dir.is_dir():
                             runs.append(self._get_run_info(run_dir))
         
-        return sorted(runs, key=lambda x: x.get('completed_at', ''), reverse=True)
+        return sorted(runs, key=lambda x: x.get('completed_at') or '', reverse=True)
     
     def _get_run_info(self, run_dir: Path) -> Dict[str, Any]:
         """Get information about a specific evaluation run"""

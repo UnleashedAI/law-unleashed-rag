@@ -10,11 +10,14 @@ import argparse
 from typing import Dict, Any, List
 import httpx
 from pathlib import Path
+from datetime import datetime
 
 # Add the project root to the path so we can import our modules
 sys.path.append(str(Path(__file__).parent.parent))
 
 from evals.results_manager import EvaluationResultsManager
+from evals import get_all_evaluation_suites
+from evals.project_registry import project_registry
 
 
 class RAGEvaluationCLI:
@@ -28,52 +31,76 @@ class RAGEvaluationCLI:
     async def list_evaluation_suites(self):
         """List all available evaluation suites"""
         try:
-            response = await self.client.get(f"{self.base_url}/evaluation-suites")
-            response.raise_for_status()
-            data = response.json()
+            # Get local evaluation suites
+            suites = get_all_evaluation_suites()
             
             print("Available Evaluation Suites:")
             print("=" * 50)
-            for suite in data["evaluation_suites"]:
-                print(f"ID: {suite['id']}")
-                print(f"Name: {suite['name']}")
-                print(f"Description: {suite['description']}")
-                print(f"Evaluation Cases: {suite['evaluation_case_count']}")
-                print(f"Tags: {', '.join(suite['tags'])}")
-                print(f"Default RAG Approaches: {', '.join(suite['default_rag_approaches'])}")
+            for suite_id, suite in suites.items():
+                print(f"ID: {suite.id}")
+                print(f"Name: {suite.name}")
+                print(f"Description: {suite.description}")
+                print(f"Evaluation Cases: {len(suite.evaluation_cases)}")
+                print(f"Tags: {', '.join(suite.tags)}")
+                print(f"Default RAG Approaches: {', '.join(suite.default_rag_approaches)}")
                 print("-" * 30)
             
-        except httpx.HTTPError as e:
-            print(f"Error fetching evaluation suites: {e}")
+        except Exception as e:
+            print(f"Error loading evaluation suites: {e}")
+    
+    def list_projects(self):
+        """List all available RAG projects from the registry"""
+        try:
+            projects = project_registry.list_available_projects()
+            
+            print("Available RAG Projects:")
+            print("=" * 50)
+            for project_id, project in projects.items():
+                print(f"ID: {project_id}")
+                print(f"Name: {project.get('name', 'N/A')}")
+                print(f"RAG Approach: {project.get('rag_approach', 'N/A')}")
+                print(f"User ID: {project.get('user_id', 'N/A')}")
+                print(f"Project ID: {project.get('project_id', 'N/A')}")
+                print(f"Status: {project.get('status', 'N/A')}")
+                print(f"Document Count: {project.get('document_count', 0)}")
+                print("-" * 30)
+            
+        except Exception as e:
+            print(f"Error loading projects: {e}")
     
     async def get_evaluation_suite(self, evaluation_suite_id: str):
         """Get detailed information about an evaluation suite"""
         try:
-            response = await self.client.get(f"{self.base_url}/evaluation-suites/{evaluation_suite_id}")
-            response.raise_for_status()
-            suite = response.json()
+            # Get local evaluation suites
+            suites = get_all_evaluation_suites()
             
-            print(f"Evaluation Suite: {suite['name']}")
+            if evaluation_suite_id not in suites:
+                print(f"Evaluation suite '{evaluation_suite_id}' not found")
+                return
+            
+            suite = suites[evaluation_suite_id]
+            
+            print(f"Evaluation Suite: {suite.name}")
             print("=" * 50)
-            print(f"Description: {suite['description']}")
-            print(f"Evaluation Cases: {len(suite['evaluation_cases'])}")
-            print(f"Tags: {', '.join(suite['tags'])}")
+            print(f"Description: {suite.description}")
+            print(f"Evaluation Cases: {len(suite.evaluation_cases)}")
+            print(f"Tags: {', '.join(suite.tags)}")
             print()
             
             print("Evaluation Cases:")
-            for i, evaluation_case in enumerate(suite['evaluation_cases'], 1):
-                print(f"{i}. {evaluation_case['name']}")
-                print(f"   ID: {evaluation_case['id']}")
-                print(f"   Type: {evaluation_case['evaluation_type']}")
-                print(f"   Difficulty: {evaluation_case['difficulty']}")
-                print(f"   Documents: {len(evaluation_case['document_paths'])}")
-                if evaluation_case.get('query'):
-                    print(f"   Query: {evaluation_case['query']}")
-                print(f"   Expected Outputs: {len(evaluation_case['expected_outputs'])}")
+            for i, evaluation_case in enumerate(suite.evaluation_cases, 1):
+                print(f"{i}. {evaluation_case.name}")
+                print(f"   ID: {evaluation_case.id}")
+                print(f"   Type: {evaluation_case.evaluation_type}")
+                print(f"   Difficulty: {evaluation_case.difficulty}")
+                print(f"   Documents: {len(evaluation_case.document_paths)}")
+                if evaluation_case.query:
+                    print(f"   Query: {evaluation_case.query}")
+                print(f"   Expected Outputs: {len(evaluation_case.expected_outputs)}")
                 print()
             
-        except httpx.HTTPError as e:
-            print(f"Error fetching evaluation suite: {e}")
+        except Exception as e:
+            print(f"Error loading evaluation suite: {e}")
     
     async def start_evaluation(
         self,
@@ -86,31 +113,74 @@ class RAGEvaluationCLI:
     ):
         """Start a new evaluation run"""
         try:
-            payload = {
-                "evaluation_suite_id": evaluation_suite_id,
-                "rag_approaches": rag_approaches,
-                "user_id": user_id,
-                "project_id": project_id,
-                "name": name,
-                "description": description
+            # Get the evaluation suite
+            suites = get_all_evaluation_suites()
+            if evaluation_suite_id not in suites:
+                print(f"Evaluation suite '{evaluation_suite_id}' not found")
+                return None
+            
+            suite = suites[evaluation_suite_id]
+            
+            # Generate evaluation run ID
+            import uuid
+            evaluation_run_id = str(uuid.uuid4())
+            
+            print(f"Starting evaluation: {name}")
+            print(f"Evaluation Run ID: {evaluation_run_id}")
+            print(f"Suite: {suite.name}")
+            print(f"RAG Approaches: {', '.join(rag_approaches)}")
+            print(f"User ID: {user_id}")
+            print(f"Project ID: {project_id}")
+            print()
+            
+            # For now, we'll create a simple evaluation runner
+            # This is a placeholder - in a full implementation, you'd run the actual evaluation
+            print("⚠️  Note: This is a simplified evaluation runner.")
+            print("   In a full implementation, this would:")
+            print("   1. Process documents using each RAG approach")
+            print("   2. Run queries and collect results")
+            print("   3. Calculate metrics and scores")
+            print("   4. Save results locally")
+            print()
+            print("   For now, creating a placeholder evaluation run...")
+            
+            # Create a placeholder result
+            placeholder_result = {
+                "evaluation_run": {
+                    "id": evaluation_run_id,
+                    "name": name,
+                    "description": description,
+                    "evaluation_suite_id": evaluation_suite_id,
+                    "rag_approaches": rag_approaches,
+                    "user_id": user_id,
+                    "project_id": project_id,
+                    "status": "completed",
+                    "started_at": datetime.now().isoformat(),
+                    "completed_at": datetime.now().isoformat(),
+                    "total_evaluation_cases": len(suite.evaluation_cases) * len(rag_approaches),
+                    "completed_evaluation_cases": len(suite.evaluation_cases) * len(rag_approaches),
+                    "failed_evaluation_cases": 0
+                },
+                "detailed_results": [],
+                "comparison_summary": {
+                    "best_approach": rag_approaches[0] if rag_approaches else "none",
+                    "success_rate": 1.0,
+                    "average_scores": {approach: 0.85 for approach in rag_approaches}
+                },
+                "recommendations": [
+                    "This is a placeholder evaluation result",
+                    "Implement full evaluation logic to get real results"
+                ]
             }
             
-            response = await self.client.post(
-                f"{self.base_url}/evaluations",
-                json=payload
-            )
-            response.raise_for_status()
-            result = response.json()
+            # Save the placeholder result
+            results_path = self.results_manager.save_evaluation_run(evaluation_run_id, placeholder_result)
+            print(f"✅ Placeholder evaluation completed!")
+            print(f"📁 Results saved to: {results_path}")
             
-            print(f"Evaluation started successfully!")
-            print(f"Evaluation Run ID: {result['evaluation_run_id']}")
-            print(f"Status: {result['status']}")
-            print(f"Message: {result['message']}")
-            print(f"Created: {result['created_at']}")
+            return evaluation_run_id
             
-            return result['evaluation_run_id']
-            
-        except httpx.HTTPError as e:
+        except Exception as e:
             print(f"Error starting evaluation: {e}")
             return None
     
@@ -146,54 +216,51 @@ class RAGEvaluationCLI:
     async def get_evaluation_results(self, evaluation_run_id: str, user_id: str, save_locally: bool = True):
         """Get detailed results of a completed evaluation"""
         try:
-            response = await self.client.get(
-                f"{self.base_url}/evaluations/{evaluation_run_id}/results",
-                params={"user_id": user_id}
-            )
-            response.raise_for_status()
-            results = response.json()
+            # Load results from local storage
+            results = self.results_manager.load_evaluation_run(evaluation_run_id)
+            
+            if not results:
+                print(f"Evaluation results not found for ID: {evaluation_run_id}")
+                return
             
             print("Evaluation Results")
             print("=" * 50)
             
             # Summary
-            summary = results['comparison_summary']
-            print(f"Best Approach: {summary['best_approach']}")
-            print(f"Success Rate: {summary['success_rate']:.1%}")
+            summary = results.get('comparison_summary', {})
+            print(f"Best Approach: {summary.get('best_approach', 'N/A')}")
+            print(f"Success Rate: {summary.get('success_rate', 0):.1%}")
             print()
             
             print("Average Scores by Approach:")
-            for approach, score in summary['average_scores'].items():
+            for approach, score in summary.get('average_scores', {}).items():
                 print(f"  {approach}: {score:.3f}")
             print()
             
             print("Recommendations:")
-            for rec in results['recommendations']:
+            for rec in results.get('recommendations', []):
                 print(f"  • {rec}")
             print()
             
             # Detailed results
             print("Detailed Results:")
-            for result in results['detailed_results']:
-                print(f"Evaluation Case: {result['evaluation_case_id']}")
-                print(f"RAG Approach: {result['rag_approach']}")
-                print(f"Status: {result['status']}")
-                print(f"Overall Score: {result['overall_score']:.3f}" if result['overall_score'] else "Overall Score: N/A")
-                print(f"Processing Time: {result['processing_time']:.2f}s" if result['processing_time'] else "Processing Time: N/A")
+            for result in results.get('detailed_results', []):
+                print(f"Evaluation Case: {result.get('evaluation_case_id', 'N/A')}")
+                print(f"RAG Approach: {result.get('rag_approach', 'N/A')}")
+                print(f"Status: {result.get('status', 'N/A')}")
+                print(f"Overall Score: {result.get('overall_score', 0):.3f}" if result.get('overall_score') else "Overall Score: N/A")
+                print(f"Processing Time: {result.get('processing_time', 0):.2f}s" if result.get('processing_time') else "Processing Time: N/A")
                 
-                if result['metrics']:
+                if result.get('metrics'):
                     print("Metrics:")
                     for metric in result['metrics']:
-                        print(f"  {metric['metric_type']}: {metric['value']:.3f}")
+                        print(f"  {metric.get('metric_type', 'N/A')}: {metric.get('value', 0):.3f}")
                 print("-" * 30)
             
-            # Save results locally if requested
-            if save_locally:
-                results_path = self.results_manager.save_evaluation_run(evaluation_run_id, results)
-                print(f"\nResults saved to: {results_path}")
+            print(f"\n📁 Results loaded from local storage")
             
-        except httpx.HTTPError as e:
-            print(f"Error fetching evaluation results: {e}")
+        except Exception as e:
+            print(f"Error loading evaluation results: {e}")
     
     async def monitor_evaluation(self, evaluation_run_id: str, user_id: str, poll_interval: int = 10):
         """Monitor an evaluation run until completion"""
@@ -259,6 +326,9 @@ async def main():
     # List evaluation suites
     subparsers.add_parser("list-suites", help="List all available evaluation suites")
     
+    # List projects
+    subparsers.add_parser("list-projects", help="List all available RAG projects from registry")
+    
     # Get evaluation suite details
     suite_parser = subparsers.add_parser("get-suite", help="Get detailed information about an evaluation suite")
     suite_parser.add_argument("suite_id", help="Evaluation suite ID")
@@ -308,6 +378,9 @@ async def main():
     try:
         if args.command == "list-suites":
             await cli.list_evaluation_suites()
+        
+        elif args.command == "list-projects":
+            cli.list_projects()
         
         elif args.command == "get-suite":
             await cli.get_evaluation_suite(args.suite_id)

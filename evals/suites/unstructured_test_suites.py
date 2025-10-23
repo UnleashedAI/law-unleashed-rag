@@ -7,6 +7,15 @@ from ..eval_models import (
     EvaluationCase, EvaluationSuite, ExpectedOutput, EvaluationCriteria,
     EvaluationType, MetricType
 )
+from ..project_registry import project_registry
+
+
+def _populate_document_paths(evaluation_case: EvaluationCase) -> EvaluationCase:
+    """Populate document paths from project registry"""
+    if evaluation_case.project_id:
+        document_paths = project_registry.get_project_document_paths(evaluation_case.project_id)
+        evaluation_case.document_paths = document_paths
+    return evaluation_case
 
 
 def create_unstructured_medical_records_suite() -> EvaluationSuite:
@@ -18,10 +27,8 @@ def create_unstructured_medical_records_suite() -> EvaluationSuite:
             name="Unstructured Patient Summary",
             description="Test ability to extract and summarize patient information from unstructured medical records",
             evaluation_type=EvaluationType.DOCUMENT_PROCESSING,
-            project_id="1lUOSTzmKN7GC5cjgiLI",
-            document_paths=[
-                "workspaces/RahGZZ7sQXX6De61oAl4/projects/1lUOSTzmKN7GC5cjgiLI/case_files/1754682622870_Nuce, Colby - Records - Thomaston Chiropractic Clinic.pdf"
-            ],
+            project_id="NbbabGQy3gkCJIDzkSoE_raganything_1",
+            document_paths=[],  # Will be populated from project registry
             expected_outputs=[
                 ExpectedOutput(
                     type="patient_narrative",
@@ -79,10 +86,8 @@ def create_unstructured_medical_records_suite() -> EvaluationSuite:
             name="Unstructured Legal Case Analysis",
             description="Test ability to provide unstructured legal analysis from medical records",
             evaluation_type=EvaluationType.QUERY_ANSWERING,
-            project_id="1lUOSTzmKN7GC5cjgiLI",
-            document_paths=[
-                "workspaces/RahGZZ7sQXX6De61oAl4/projects/1lUOSTzmKN7GC5cjgiLI/case_files/1754682622870_Nuce, Colby - Records - Thomaston Chiropractic Clinic.pdf"
-            ],
+            project_id="NbbabGQy3gkCJIDzkSoE_raganything_1",
+            document_paths=[],  # Will be populated from project registry
             query="Provide a comprehensive legal analysis of this case, including evidence of injury, causation, and potential damages.",
             expected_outputs=[
                 ExpectedOutput(
@@ -127,10 +132,8 @@ def create_unstructured_medical_records_suite() -> EvaluationSuite:
             name="Unstructured Insurance Claim Summary",
             description="Test ability to create unstructured summaries for insurance purposes",
             evaluation_type=EvaluationType.DOCUMENT_PROCESSING,
-            project_id="1lUOSTzmKN7GC5cjgiLI",
-            document_paths=[
-                "workspaces/RahGZZ7sQXX6De61oAl4/projects/1lUOSTzmKN7GC5cjgiLI/case_files/1754682622870_Nuce, Colby - Records - Thomaston Chiropractic Clinic.pdf"
-            ],
+            project_id="NbbabGQy3gkCJIDzkSoE_raganything_1",
+            document_paths=[],  # Will be populated from project registry
             expected_outputs=[
                 ExpectedOutput(
                     type="insurance_narrative",
@@ -166,6 +169,9 @@ def create_unstructured_medical_records_suite() -> EvaluationSuite:
             difficulty="medium"
         )
     ]
+    
+    # Populate document paths from project registry
+    evaluation_cases = [_populate_document_paths(case) for case in evaluation_cases]
     
     return EvaluationSuite(
         id="unstructured_medical_records",
