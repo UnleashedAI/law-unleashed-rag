@@ -617,9 +617,6 @@ class RAGVertexService(RAGInterface):
                                     if hasattr(support, 'segment') and support.segment:
                                         sources[i]["metadata"]["segment_text"] = getattr(support.segment, 'text', None)
             
-            # Log the response structure for debugging
-            logger.info(f"Response structure: {type(response)}")
-            logger.info(f"Response attributes: {dir(response)}")
             if hasattr(response, 'candidates'):
                 logger.info(f"Number of candidates: {len(response.candidates) if response.candidates else 0}")
                 if response.candidates:

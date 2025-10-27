@@ -657,6 +657,392 @@ class EvaluationService:
         # TODO: Implement retrieval from storage
         return None
     
+    async def run_evaluation_with_approach(
+        self,
+        evaluation_suite: EvaluationSuite,
+        rag_approach: str,
+        user_id: str,
+        project_id: str
+    ) -> List[EvaluationCaseResult]:
+        """Run an evaluation suite with a specific RAG approach"""
+        
+        logger.info(f"🚀 Starting evaluation suite: {evaluation_suite.name}")
+        logger.info(f"📋 RAG Approach: {rag_approach}")
+        logger.info(f"📊 Total cases: {len(evaluation_suite.evaluation_cases)}")
+        logger.info(f"👤 User ID: {user_id}")
+        logger.info(f"📁 Project ID: {project_id}")
+        print()
+        
+        results = []
+        for i, evaluation_case in enumerate(evaluation_suite.evaluation_cases, 1):
+            logger.info(f"[{i}/{len(evaluation_suite.evaluation_cases)}] 🔄 Running: {evaluation_case.name}")
+            logger.info(f"📝 Prompt: {evaluation_case.prompt[:100]}...")
+            logger.info(f"🎯 Expected: {evaluation_case.expected_output}")
+            
+            try:
+                result = await self._run_simplified_evaluation_case(evaluation_case, rag_approach, user_id)
+                results.append(result)
+                
+                if result.status == EvaluationStatus.COMPLETED:
+                    logger.info(f"✅ Completed {evaluation_case.id}: Score {result.overall_score:.3f}")
+                    logger.info(f"🤖 Response: {result.actual_response[:200]}...")
+                else:
+                    logger.error(f"❌ Failed {evaluation_case.id}: {result.error_message}")
+                
+                print()
+                
+            except Exception as e:
+                logger.error(f"💥 Error running {evaluation_case.id}: {e}")
+                # Create failed result
+                failed_result = EvaluationCaseResult(
+                    evaluation_case_id=evaluation_case.id,
+                    rag_approach=rag_approach,
+                    prompt=evaluation_case.prompt,
+                    expected_output=evaluation_case.expected_output,
+                    actual_response="",
+                    status=EvaluationStatus.FAILED,
+                    error_message=str(e),
+                    executed_by=user_id
+                )
+                results.append(failed_result)
+                print()
+        
+        logger.info(f"🎉 Evaluation suite completed! Processed {len(results)} cases")
+        return results
+    
+    async def _run_simplified_evaluation_case(
+        self,
+        evaluation_case: EvaluationCase,
+        rag_approach: str,
+        user_id: str
+    ) -> EvaluationCaseResult:
+        """Run a simplified evaluation case with just prompt and expected output"""
+        
+        logger.info(f"🔍 Processing evaluation case: {evaluation_case.id}")
+        
+        start_time = time.time()
+        start_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
+        
+        result = EvaluationCaseResult(
+            evaluation_case_id=evaluation_case.id,
+            rag_approach=rag_approach,
+            prompt=evaluation_case.prompt,
+            expected_output=evaluation_case.expected_output,
+            actual_response="",
+            status=EvaluationStatus.RUNNING,
+            executed_by=user_id
+        )
+        
+        try:
+            # Get the actual project ID and corpus info from the registry
+            from .project_registry import project_registry
+            actual_project_id = project_registry.get_actual_project_id(evaluation_case.project_id, rag_approach)
+            if not actual_project_id:
+                logger.error(f"❌ No project found for base ID '{evaluation_case.project_id}' with approach '{rag_approach}'")
+                raise Exception(f"No project found for base ID '{evaluation_case.project_id}' with approach '{rag_approach}'")
+            
+            logger.info(f"🔍 Using actual project ID: {actual_project_id}")
+            
+            # Get corpus info and model for rag_vertex approach
+            corpus_info = None
+            model = evaluation_case.model
+            
+            if rag_approach == "rag_vertex":
+                corpus_info = project_registry.get_project_corpus_info(actual_project_id)
+                if corpus_info:
+                    logger.info(f"📋 Found corpus info: {corpus_info.get('corpus_name', 'N/A')}")
+                else:
+                    logger.warning(f"⚠️ No corpus info found for {actual_project_id}")
+                
+                # Use the model from the project registry for rag_vertex
+                project = project_registry.get_project(actual_project_id)
+                if project and project.get("model"):
+                    model = project["model"]
+                    logger.info(f"🔧 Using model from registry: {model}")
+            
+            # Query the RAG system directly
+            logger.info(f"🌐 Making API call to RAG system...")
+            actual_response = await self._query_documents_via_api(
+                user_id=user_id,
+                project_id=actual_project_id,
+                query=evaluation_case.prompt,
+                rag_approach=rag_approach,
+                model=model,
+                corpus_info=corpus_info
+            )
+            
+            # Extract the response text
+            response_text = actual_response.get("answer", "")
+            result.actual_response = response_text
+            
+            if not response_text or response_text.strip() == "":
+                logger.warning(f"⚠️ Empty response received from RAG system")
+                logger.warning(f"🔍 Full API response: {actual_response}")
+            else:
+                logger.info(f"📥 Received response ({len(response_text)} chars)")
+            
+            # Calculate metrics using LLM
+            logger.info(f"🧠 Calculating metrics with LLM...")
+            metrics = await self._calculate_simplified_metrics(
+                evaluation_case.prompt,
+                response_text,
+                evaluation_case.expected_output
+            )
+            result.metrics = metrics
+            
+            # Calculate overall score
+            result.overall_score = self._calculate_simplified_overall_score(metrics)
+            
+            # Record performance metrics
+            end_time = time.time()
+            end_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
+            
+            result.processing_time = end_time - start_time
+            result.memory_usage = end_memory - start_memory
+            result.status = EvaluationStatus.COMPLETED
+            
+            logger.info(f"✅ Evaluation case completed in {result.processing_time:.2f}s")
+            
+        except Exception as e:
+            logger.error(f"💥 Error in evaluation case {evaluation_case.id}: {e}")
+            result.status = EvaluationStatus.FAILED
+            result.error_message = str(e)
+            result.processing_time = time.time() - start_time
+        
+        return result
+    
+    async def _calculate_simplified_metrics(
+        self,
+        prompt: str,
+        response: str,
+        expected_output: str
+    ) -> List[MetricResult]:
+        """Calculate metrics for simplified evaluation using LLM with separate calls for each metric"""
+        
+        logger.info(f"🔍 Calculating relevance, completeness, and coherence with separate LLM calls...")
+        
+        # Check for empty or invalid responses
+        if not response or response.strip() == "":
+            logger.warning(f"⚠️ Empty response detected, assigning zero scores")
+            return [
+                MetricResult(
+                    metric_type=MetricType.RELEVANCE, 
+                    value=0.0,
+                    details={"explanation": "Empty response - no content to evaluate"}
+                ),
+                MetricResult(
+                    metric_type=MetricType.COMPLETENESS, 
+                    value=0.0,
+                    details={"explanation": "Empty response - no content to evaluate"}
+                ),
+                MetricResult(
+                    metric_type=MetricType.COHERENCE, 
+                    value=0.0,
+                    details={"explanation": "Empty response - no content to evaluate"}
+                )
+            ]
+        
+        metrics = []
+        
+        # Evaluate RELEVANCE
+        try:
+            logger.info(f"🧠 Evaluating relevance...")
+            relevance_result = await self._evaluate_relevance(prompt, response, expected_output)
+            metrics.append(relevance_result)
+        except Exception as e:
+            logger.warning(f"⚠️ Relevance evaluation failed: {e}")
+            metrics.append(MetricResult(
+                metric_type=MetricType.RELEVANCE, 
+                value=0.5,
+                details={"explanation": f"Evaluation failed: {str(e)}"}
+            ))
+        
+        # Evaluate COMPLETENESS
+        try:
+            logger.info(f"🧠 Evaluating completeness...")
+            completeness_result = await self._evaluate_completeness(prompt, response, expected_output)
+            metrics.append(completeness_result)
+        except Exception as e:
+            logger.warning(f"⚠️ Completeness evaluation failed: {e}")
+            metrics.append(MetricResult(
+                metric_type=MetricType.COMPLETENESS, 
+                value=0.5,
+                details={"explanation": f"Evaluation failed: {str(e)}"}
+            ))
+        
+        # Evaluate COHERENCE
+        try:
+            logger.info(f"🧠 Evaluating coherence...")
+            coherence_result = await self._evaluate_coherence(prompt, response, expected_output)
+            metrics.append(coherence_result)
+        except Exception as e:
+            logger.warning(f"⚠️ Coherence evaluation failed: {e}")
+            metrics.append(MetricResult(
+                metric_type=MetricType.COHERENCE, 
+                value=0.5,
+                details={"explanation": f"Evaluation failed: {str(e)}"}
+            ))
+        
+        logger.info(f"📊 Metrics calculated: Relevance={metrics[0].value:.3f}, Completeness={metrics[1].value:.3f}, Coherence={metrics[2].value:.3f}")
+        return metrics
+    
+    async def _evaluate_relevance(self, prompt: str, response: str, expected_output: str) -> MetricResult:
+        """Evaluate how well the response addresses the prompt"""
+        eval_prompt = f"""
+You are evaluating a RAG system response for RELEVANCE.
+
+PROMPT: {prompt}
+
+RESPONSE: {response}
+
+EXPECTED OUTPUT: {expected_output}
+
+IMPORTANT: If the response is a refusal to help, an error message, or indicates it cannot assist (like "I can't assist", "I'm sorry but I can't", etc.), it should receive a very low relevance score (0.0-0.2) because it does not address the actual prompt.
+
+Rate the RELEVANCE of the response (0.0 to 1.0):
+- 1.0: Perfectly addresses the prompt, directly answers what was asked
+- 0.8-0.9: Mostly relevant, addresses most aspects of the prompt
+- 0.6-0.7: Somewhat relevant, addresses some aspects but misses others
+- 0.4-0.5: Partially relevant, addresses some parts but largely off-topic
+- 0.0-0.3: Not relevant, doesn't address the prompt, is a refusal, or is completely off-topic
+
+Respond in JSON format:
+{{"score": <score>, "explanation": "<explanation>"}}
+"""
+        
+        llm_response = await self.openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": eval_prompt}],
+            temperature=0.1
+        )
+        
+        content = llm_response.choices[0].message.content.strip()
+        if content.startswith("```json"):
+            content = content[7:-3]
+        elif content.startswith("```"):
+            content = content[3:-3]
+        
+        import json
+        data = json.loads(content)
+        
+        return MetricResult(
+            metric_type=MetricType.RELEVANCE,
+            value=float(data.get("score", 0.5)),
+            details={"explanation": data.get("explanation", "No explanation provided")}
+        )
+    
+    async def _evaluate_completeness(self, prompt: str, response: str, expected_output: str) -> MetricResult:
+        """Evaluate how complete the response is compared to expected output"""
+        eval_prompt = f"""
+You are evaluating a RAG system response for COMPLETENESS.
+
+PROMPT: {prompt}
+
+RESPONSE: {response}
+
+EXPECTED OUTPUT: {expected_output}
+
+IMPORTANT: If the response is a refusal to help, an error message, or indicates it cannot assist (like "I can't assist", "I'm sorry but I can't", etc.), it should receive a very low completeness score (0.0-0.2) because it provides none of the expected content.
+
+Rate the COMPLETENESS of the response (0.0 to 1.0):
+- 1.0: Contains all expected elements and information
+- 0.8-0.9: Contains most expected elements, minor gaps
+- 0.6-0.7: Contains some expected elements, moderate gaps
+- 0.4-0.5: Contains few expected elements, major gaps
+- 0.0-0.3: Contains almost no expected elements, is incomplete, or is a refusal to help
+
+Respond in JSON format:
+{{"score": <score>, "explanation": "<explanation>"}}
+"""
+        
+        llm_response = await self.openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": eval_prompt}],
+            temperature=0.1
+        )
+        
+        content = llm_response.choices[0].message.content.strip()
+        if content.startswith("```json"):
+            content = content[7:-3]
+        elif content.startswith("```"):
+            content = content[3:-3]
+        
+        import json
+        data = json.loads(content)
+        
+        return MetricResult(
+            metric_type=MetricType.COMPLETENESS,
+            value=float(data.get("score", 0.5)),
+            details={"explanation": data.get("explanation", "No explanation provided")}
+        )
+    
+    async def _evaluate_coherence(self, prompt: str, response: str, expected_output: str) -> MetricResult:
+        """Evaluate how well-structured and coherent the response is"""
+        eval_prompt = f"""
+You are evaluating a RAG system response for COHERENCE.
+
+PROMPT: {prompt}
+
+RESPONSE: {response}
+
+EXPECTED OUTPUT: {expected_output}
+
+IMPORTANT: If the response is a refusal to help, an error message, or indicates it cannot assist (like "I can't assist", "I'm sorry but I can't", etc.), it should receive a low coherence score (0.0-0.3) because it doesn't provide the expected structured content.
+
+Rate the COHERENCE of the response (0.0 to 1.0):
+- 1.0: Well-structured, logical flow, clear and coherent
+- 0.8-0.9: Mostly coherent with minor structural issues
+- 0.6-0.7: Somewhat coherent but has noticeable structural problems
+- 0.4-0.5: Partially coherent but difficult to follow
+- 0.0-0.3: Incoherent, poorly structured, difficult to understand, or is a refusal to help
+
+Respond in JSON format:
+{{"score": <score>, "explanation": "<explanation>"}}
+"""
+        
+        llm_response = await self.openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": eval_prompt}],
+            temperature=0.1
+        )
+        
+        content = llm_response.choices[0].message.content.strip()
+        if content.startswith("```json"):
+            content = content[7:-3]
+        elif content.startswith("```"):
+            content = content[3:-3]
+        
+        import json
+        data = json.loads(content)
+        
+        return MetricResult(
+            metric_type=MetricType.COHERENCE,
+            value=float(data.get("score", 0.5)),
+            details={"explanation": data.get("explanation", "No explanation provided")}
+        )
+    
+    def _calculate_simplified_overall_score(self, metrics: List[MetricResult]) -> float:
+        """Calculate overall score from simplified metrics"""
+        if not metrics:
+            return 0.0
+        
+        # Equal weights for the three metrics
+        weights = {
+            MetricType.RELEVANCE: 0.4,
+            MetricType.COMPLETENESS: 0.3,
+            MetricType.COHERENCE: 0.3
+        }
+        
+        total_weight = 0.0
+        weighted_sum = 0.0
+        
+        for metric in metrics:
+            weight = weights.get(metric.metric_type, 0.0)
+            weighted_sum += metric.value * weight
+            total_weight += weight
+        
+        return weighted_sum / total_weight if total_weight > 0 else 0.0
+    
     async def _process_document_via_api(
         self,
         user_id: str,
@@ -742,7 +1128,8 @@ class EvaluationService:
         query: str,
         rag_approach: str,
         model: str = "gpt-4o-mini",
-        config: Optional[Dict[str, Any]] = None
+        config: Optional[Dict[str, Any]] = None,
+        corpus_info: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Query documents via API call"""
         
@@ -755,6 +1142,10 @@ class EvaluationService:
                 "model": model,
                 "config": config or {}
             }
+            
+            # Add corpus_info for rag_vertex approach
+            if corpus_info:
+                payload["corpus_info"] = corpus_info
             
             response = await client.post(
                 f"{self.api_base_url}/query",

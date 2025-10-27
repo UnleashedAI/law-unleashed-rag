@@ -62,32 +62,17 @@ class EvaluationCriteria(BaseModel):
 
 
 class EvaluationCase(BaseModel):
-    """Individual evaluation case definition"""
+    """Simplified evaluation case definition"""
     id: str = Field(..., description="Unique evaluation case ID")
     name: str = Field(..., description="Human-readable evaluation case name")
-    description: str = Field(..., description="Description of what this evaluation case evaluates")
-    evaluation_type: EvaluationType = Field(..., description="Type of evaluation")
-    
-    # Input data
     project_id: str = Field(..., description="Project ID for the evaluation case")
-    document_paths: List[str] = Field(..., description="GCS paths to documents to process")
-    query: Optional[str] = Field(default=None, description="Query to test (for query answering)")
+    prompt: str = Field(..., description="Prompt to send to the RAG system")
+    expected_output: str = Field(..., description="Expected output string")
     
-    # Expected outputs and criteria
-    expected_outputs: List[ExpectedOutput] = Field(..., description="Expected outputs")
-    evaluation_criteria: EvaluationCriteria = Field(..., description="Evaluation criteria")
-    
-    # Configuration
-    rag_approach: Optional[str] = Field(default=None, description="Specific RAG approach to test (None for all)")
-    parser: str = Field(default="mineru", description="Parser to use")
+    # Optional configuration
     model: str = Field(default="gpt-4o-mini", description="Model to use")
-    config: Optional[Dict[str, Any]] = Field(default=None, description="Additional configuration")
-    
-    # Metadata
     tags: List[str] = Field(default_factory=list, description="Tags for categorization")
-    difficulty: str = Field(default="medium", description="Difficulty level (easy, medium, hard)")
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class EvaluationSuite(BaseModel):
@@ -104,6 +89,7 @@ class EvaluationSuite(BaseModel):
     
     # Metadata
     tags: List[str] = Field(default_factory=list, description="Tags for categorization")
+    user_id: str = Field(..., description="User ID associated with this suite")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -124,7 +110,9 @@ class EvaluationCaseResult(BaseModel):
     status: EvaluationStatus = Field(..., description="Execution status")
     
     # Results
-    actual_outputs: Optional[Dict[str, Any]] = Field(default=None, description="Actual outputs from the RAG approach")
+    prompt: str = Field(..., description="Prompt that was sent")
+    expected_output: str = Field(..., description="Expected output string")
+    actual_response: str = Field(..., description="Actual response from the LLM")
     metrics: List[MetricResult] = Field(default_factory=list, description="Calculated metrics")
     overall_score: Optional[float] = Field(default=None, description="Overall weighted score")
     
@@ -136,6 +124,8 @@ class EvaluationCaseResult(BaseModel):
     # Metadata
     executed_at: datetime = Field(default_factory=datetime.utcnow)
     executed_by: str = Field(..., description="User or system that executed the test")
+
+
 
 
 class EvaluationRun(BaseModel):

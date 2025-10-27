@@ -1,6 +1,15 @@
 # RAG Evaluation Framework
 
-This directory contains the evaluation framework for comparing different RAG approaches.
+This directory contains a simplified evaluation framework for comparing different RAG approaches using LLM-based metrics.
+
+## Overview
+
+The evaluation framework provides a streamlined way to test and compare RAG systems by:
+- **Project-specific evaluation suites** - Each project gets its own evaluation suite
+- **LLM-as-a-Judge metrics** - Uses GPT-4o-mini to evaluate relevance, completeness, and coherence
+- **Simplified case definitions** - Just prompt and expected output strings
+- **Detailed explanations** - LLM provides explanations for each metric score
+- **Performance tracking** - Monitors processing time and memory usage
 
 ## Requirements
 
@@ -32,183 +41,189 @@ evals/
 ├── eval_models.py             # Evaluation data models
 ├── eval_service.py            # Evaluation execution service
 ├── eval_cli.py                # Command-line interface
-├── results_manager.py         # Results storage and organization
+├── project_registry.py        # RAG project configuration management
 ├── requirements.txt           # Evaluation framework dependencies
-├── suites/                    # Test suite definitions
+├── suites/                    # Project-specific test suite definitions
 │   ├── __init__.py
-│   ├── sample_test_suites.py  # Sample test suites
-│   ├── real_world_test_suites.py  # Real-world test suites
-│   └── unstructured_test_suites.py  # LLM-as-a-Judge test suites
+│   └── [projectId]_suite.py   # Project-specific evaluation suites
 └── results/                   # Evaluation results storage
-    ├── YYYY-MM-DD/           # Results organized by date
-    │   ├── evaluation_run_id/ # Individual evaluation results
-    │   │   ├── evaluation_results.json  # Complete results
-    │   │   ├── summary.json          # Summary information
-    │   │   ├── README.md             # Human-readable summary
-    │   │   └── evaluation_cases/     # Individual test case results
-    │   └── comparisons/       # Comparison reports (future)
-    └── ...
+    └── [timestamp]_[projectId]_[approach].json  # Results files
 ```
 
 ## Evaluation Suites
 
-### Sample Evaluation Suites
-- **Legal Documents**: Contract analysis, legal research
-- **Medical Documents**: Medical records, cross-document analysis
-- **Performance Tests**: Large documents, batch processing
-- **Comprehensive Tests**: Multi-format, end-to-end workflows
+### Project-Specific Suites
 
-### Real-World Evaluation Suites
-- **Chiropractic Records**: Based on your actual chiropractic medical records
-- **Law Unleashed Comprehensive**: Comprehensive legal document processing
+Each RAG project has its own evaluation suite file named `[projectId]_suite.py`:
+
+- **NbbabGQy3gkCJIDzkSoE_suite.py**: Chiropractic medical records evaluation
+- **Future projects**: Each will get its own `[projectId]_suite.py` file
+
+### Suite Structure
+
+Each suite contains:
+- **User ID**: Stored in the suite for convenience
+- **Evaluation Cases**: Simple prompt + expected output pairs
+- **Project Configuration**: Default RAG approaches and settings
 
 ## Usage
 
 ### Command Line Interface
 
 ```bash
-# List available evaluation suites
-python evals/eval_cli.py list-suites
+# List available project suites
+python evals/eval_cli.py list-project-suites
 
-# Get detailed evaluation suite information
-python evals/eval_cli.py get-suite chiropractic_records
+# Run evaluation for a specific project and RAG approach
+python evals/eval_cli.py run-project-suite [projectId] --run-type [approach]
 
-# Start an evaluation
-python evals/eval_cli.py start-eval chiropractic_records \
-  --approaches raganything evidence_sweep rag_vertex \
-  --user-id 7CtdhckRcxOIjU3Dh7Ao3jvigg13 \
-  --project-id NbbabGQy3gkCJIDzkSoE \
-  --name "Chiropractic Records Comparison"
-
-# Monitor evaluation progress
-python evals/eval_cli.py monitor {evaluation_id} --user-id 7CtdhckRcxOIjU3Dh7Ao3jvigg13
-
-# Get evaluation results
-python evals/eval_cli.py results {evaluation_id} --user-id 7CtdhckRcxOIjU3Dh7Ao3jvigg13
-
-# List local results
-python evals/eval_cli.py list-results
-
-# Compare multiple evaluations
-python evals/eval_cli.py compare {eval_id1} {eval_id2} {eval_id3}
+# Examples:
+python evals/eval_cli.py run-project-suite NbbabGQy3gkCJIDzkSoE --run-type raganything
+python evals/eval_cli.py run-project-suite NbbabGQy3gkCJIDzkSoE --run-type rag_vertex
 ```
 
-### Programmatic Usage
+### Available RAG Approaches
 
-```python
-from evals import get_all_evaluation_suites
-from evals.results_manager import EvaluationResultsManager
-
-# Get all evaluation suites
-evaluation_suites = get_all_evaluation_suites()
-
-# Manage results
-results_manager = EvaluationResultsManager()
-runs = results_manager.list_evaluation_runs()
-```
+- **raganything**: Uses the raganything RAG service
+- **rag_vertex**: Uses Google Vertex AI RAG service
 
 ## Results Organization
 
-Evaluation results are automatically organized in the `results/` directory:
+Evaluation results are saved with the naming convention `[timestamp]_[projectId]_[approach].json`:
 
 ```
 results/
-├── 2025-10-23/                    # Date-based organization
-│   ├── 80da8297-b454-4e6b-bbe8-edbc8a5b043e/  # Individual evaluation run
-│   │   ├── evaluation_results.json  # Complete results
-│   │   ├── summary.json          # Summary information
-│   │   ├── README.md             # Human-readable summary
-│   │   └── evaluation_cases/     # Individual test case results
-│   │       ├── chiropractic_records_analysis_raganything.json
-│   │       ├── chiropractic_query_answering_raganything.json
-│   │       └── chiropractic_evidence_extraction_raganything.json
-│   └── comparisons/              # Comparison reports (future feature)
-└── 2025-10-24/
-    └── ...
+├── 20251027_114930_NbbabGQy3gkCJIDzkSoE_rag_vertex.json
+├── 20251027_115141_NbbabGQy3gkCJIDzkSoE_raganything.json
+└── ...
 ```
+
+### Results Format
+
+Each results file contains:
+- **Metadata**: Timestamp, project ID, approach
+- **Evaluation Results**: For each test case:
+  - Prompt and expected output
+  - Actual LLM response
+  - Metrics with explanations:
+    - **Relevance**: How well the response addresses the prompt
+    - **Completeness**: How much expected content was included
+    - **Coherence**: How well-structured and logical the response is
+  - Performance data: Processing time and memory usage
+  - Overall weighted score
 
 ## Creating Custom Evaluation Suites
 
-1. **Create a new evaluation suite file** in `suites/`:
+1. **Create a new project suite file** in `suites/`:
 
 ```python
-from evals.eval_models import EvaluationCase, EvaluationSuite, ExpectedOutput, EvaluationCriteria
-from evals.eval_models import EvaluationType, MetricType
+from ..eval_models import EvaluationCase, EvaluationSuite
 
-def create_my_custom_suite() -> EvaluationSuite:
+def create_[projectId]_suite() -> EvaluationSuite:
+    """Create evaluation suite for [projectId] project"""
+    
     evaluation_cases = [
         EvaluationCase(
-            id="my_evaluation_case",
-            name="My Custom Evaluation",
-            description="Evaluate my specific use case",
-            evaluation_type=EvaluationType.DOCUMENT_PROCESSING,
-            project_id="my_project",
-            document_paths=["gs://my-bucket/my-document.pdf"],
-            expected_outputs=[
-                ExpectedOutput(
-                    type="custom_output",
-                    content=["expected_item1", "expected_item2"],
-                    weight=1.0
-                )
-            ],
-            evaluation_criteria=EvaluationCriteria(
-                metrics=[MetricType.COMPLETENESS, MetricType.SEMANTIC_SIMILARITY],
-                thresholds={MetricType.COMPLETENESS: 0.8}
-            )
-        )
+            id="test_case_1",
+            name="Test Case 1",
+            project_id="[projectId]",
+            prompt="Your test prompt here...",
+            expected_output="Expected response string here..."
+        ),
+        # Add more test cases...
     ]
     
     return EvaluationSuite(
-        id="my_custom_suite",
-        name="My Custom Evaluation Suite",
-        description="Custom evaluation suite for my use case",
-        evaluation_cases=evaluation_cases
+        id="[projectId]",
+        name="[Project Name] Evaluation Suite",
+        description="Evaluation suite for [project]",
+        evaluation_cases=evaluation_cases,
+        default_rag_approaches=["raganything", "rag_vertex"],
+        tags=["your", "tags", "here"],
+        user_id="your_user_id_here"
     )
 ```
 
 2. **Add to the main module** by updating `__init__.py`:
 
 ```python
-from .suites.my_custom_suite import create_my_custom_suite
+from .suites.[projectId]_suite import create_[projectId]_suite
 
 def get_all_evaluation_suites():
     # ... existing suites ...
-    custom_suites = {"my_custom_suite": create_my_custom_suite()}
-    return {**existing_suites, **custom_suites}
+    return {
+        # ... existing suites ...
+        "[projectId]": create_[projectId]_suite()
+    }
 ```
 
 ## Evaluation Metrics
 
-The framework calculates multiple metrics:
+The framework uses LLM-based evaluation with three key metrics:
 
-- **Completeness**: How much of expected content was found
-- **Semantic Similarity**: How similar actual outputs are to expected
-- **Relevance**: How relevant outputs are to the query/task
-- **Processing Time**: Speed of document processing
-- **Memory Usage**: Resource consumption
+### Relevance (0.0 - 1.0)
+- **High (0.8-1.0)**: Response directly addresses the prompt
+- **Medium (0.5-0.7)**: Partially relevant but missing key elements
+- **Low (0.0-0.4)**: Off-topic, refusal, or error responses
+
+### Completeness (0.0 - 1.0)
+- **High (0.8-1.0)**: Contains all expected information
+- **Medium (0.5-0.7)**: Missing some expected elements
+- **Low (0.0-0.4)**: Missing most or all expected content
+
+### Coherence (0.0 - 1.0)
+- **High (0.8-1.0)**: Well-structured, logical flow
+- **Medium (0.5-0.7)**: Somewhat organized but unclear in places
+- **Low (0.0-0.4)**: Poorly structured or confusing
+
+### Performance Metrics
+- **Processing Time**: Total time for evaluation (seconds)
+- **Memory Usage**: Additional memory consumed during evaluation (MB)
 - **Overall Score**: Weighted combination of all metrics
+
+## Key Features
+
+### Simplified Case Definition
+- Just `prompt` and `expected_output` strings
+- No complex document paths or criteria
+- Easy to create and maintain
+
+### LLM-as-a-Judge
+- Uses GPT-4o-mini for consistent evaluation
+- Provides detailed explanations for each score
+- Handles edge cases like empty responses and refusals
+
+### Project Integration
+- Automatically resolves project IDs from registry
+- Uses correct models and configurations per approach
+- Handles corpus info for Vertex AI
+
+### Detailed Logging
+- Step-by-step progress tracking
+- API call monitoring
+- Performance metrics
 
 ## Best Practices
 
-1. **Start with existing evaluation suites** to understand the framework
-2. **Use real documents** from your domain for meaningful results
-3. **Define clear expected outputs** with specific, measurable criteria
-4. **Set appropriate thresholds** based on your requirements
-5. **Save results locally** for future comparison and analysis
-6. **Document your evaluation cases** with clear descriptions and rationale
+1. **Start with simple test cases** to understand the framework
+2. **Use realistic prompts** that match your actual use cases
+3. **Define clear expected outputs** with specific details
+4. **Review LLM explanations** to understand scoring decisions
+5. **Compare multiple approaches** to see relative performance
+6. **Monitor performance metrics** for optimization opportunities
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Import errors**: Make sure you're running from the project root
-2. **Service not running**: Start the RAG service with `./start_rag_service.sh`
-3. **Authentication errors**: Check your Firebase and GCS credentials
-4. **Document not found**: Verify document paths exist in your GCS bucket
+1. **Service not running**: Start the RAG service with `./start_rag_service.sh`
+2. **Project not found**: Check that the project exists in `rag_projects.json`
+3. **Empty responses**: Verify the RAG service is working and documents are processed
+4. **Model errors**: Check that the correct model is configured for each approach
 
 ### Getting Help
 
 - Check the main project README for setup instructions
 - Review the API documentation at `http://localhost:8000/docs`
-- Look at example evaluation suites for reference implementations
-- Check the evaluation guide in the project root
+- Look at existing suite files for reference implementations
+- Check the evaluation results JSON files for detailed diagnostics

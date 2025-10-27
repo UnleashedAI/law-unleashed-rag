@@ -1,0 +1,38 @@
+{
+  "rag_databases": {
+    "NbbabGQy3gkCJIDzkSoE_raganything_1": {
+      "name": "Thomaston Chiropractic Clinic Records - RAGAnything v1",
+      "project_id": "NbbabGQy3gkCJIDzkSoE",
+      "rag_approach": "raganything",
+      "iteration": 1,
+      "user_id": "7CtdhckRcxOIjU3Dh7Ao3jvigg13",
+      "workspace_id": "RahGZZ7sQXX6De61oAl4",
+      "gcs_path": "gs://lawunleashed-dev.firebasestorage.app/workspaces/RahGZZ7sQXX6De61oAl4/projects/NbbabGQy3gkCJIDzkSoE/case_files",
+      "status": "loaded",
+      "parser": "unstructured",
+      "model": "gpt-4o-mini",
+      "created_at": "2025-01-20T10:05:00Z",
+      "document_count": 0
+    },
+    "NbbabGQy3gkCJIDzkSoE_vertex_rag_1": {
+      "name": "Thomaston Chiropractic Clinic Records - Vertex RAG v1",
+      "project_id": "NbbabGQy3gkCJIDzkSoE",
+      "rag_approach": "rag_vertex",
+      "iteration": 1,
+      "user_id": "7CtdhckRcxOIjU3Dh7Ao3jvigg13",
+      "workspace_id": "RahGZZ7sQXX6De61oAl4",
+      "gcs_path": "gs://lawunleashed-dev.firebasestorage.app/workspaces/RahGZZ7sQXX6De61oAl4/projects/NbbabGQy3gkCJIDzkSoE/case_files",
+      "status": "processing",
+      "parser": "llm_parser",
+      "model": "gemini-2.0-flash-001",
+      "created_at": "2025-01-20T10:10:00Z",
+      "document_count": 0,
+      "last_job_id": "1de177be-bd81-49ff-8d96-c545c31769a5",
+      "corpus_info": {
+        "corpus_name": "projects/951660753366/locations/us-east4/ragCorpora/2227030015734710272",
+        "gcs_bucket": "lawunleashed-dev.firebasestorage.app",
+        "gcs_folder_path": "gs://lawunleashed-dev.firebasestorage.app/workspaces/RahGZZ7sQXX6De61oAl4/projects/NbbabGQy3gkCJIDzkSoE/case_files"
+      }
+    }
+  }
+}

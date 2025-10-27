@@ -79,6 +79,24 @@ class ProjectRegistry:
             if project.get("rag_approach") == rag_approach:
                 projects[project_id] = project
         return projects
+    
+    def find_project_by_base_id_and_approach(self, base_project_id: str, rag_approach: str) -> Optional[Dict[str, Any]]:
+        """Find project by base project ID and RAG approach"""
+        for project_id, project in self.projects.get("rag_databases", {}).items():
+            if (project.get("project_id") == base_project_id and 
+                project.get("rag_approach") == rag_approach):
+                return project
+        return None
+    
+    def get_actual_project_id(self, base_project_id: str, rag_approach: str) -> Optional[str]:
+        """Get the actual project ID from registry for a base project ID and RAG approach"""
+        project = self.find_project_by_base_id_and_approach(base_project_id, rag_approach)
+        if project:
+            # Find the key that corresponds to this project
+            for project_id, proj in self.projects.get("rag_databases", {}).items():
+                if proj == project:
+                    return project_id
+        return None
 
 
 # Global instance
